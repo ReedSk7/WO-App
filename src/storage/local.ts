@@ -1,0 +1,10 @@
+import type { TemplateSettings, WorkOrderDraft } from '../types';
+import { defaultTemplates } from '../templates/defaults';
+const K={drafts:'woa_drafts',templates:'woa_templates',theme:'woa_theme'};
+export const loadDrafts=():WorkOrderDraft[]=>JSON.parse(localStorage.getItem(K.drafts)??'[]');
+export const saveDrafts=(d:WorkOrderDraft[])=>localStorage.setItem(K.drafts,JSON.stringify(d));
+export const upsertDraft=(draft:WorkOrderDraft)=>{const all=loadDrafts();const i=all.findIndex(x=>x.id===draft.id); if(i>=0) all[i]=draft; else all.unshift(draft); saveDrafts(all);};
+export const loadTemplates=():TemplateSettings=>({ ...defaultTemplates, ...(JSON.parse(localStorage.getItem(K.templates)??'{}'))});
+export const saveTemplates=(t:TemplateSettings)=>localStorage.setItem(K.templates,JSON.stringify(t));
+export const loadTheme=()=>localStorage.getItem(K.theme)??'light';
+export const saveTheme=(v:string)=>localStorage.setItem(K.theme,v);

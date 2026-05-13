@@ -1,0 +1,7 @@
+- Use fake/demo data only.
+- Do not include real nuclear plant data.
+- Do not invent technical values.
+- Keep draft output conservative.
+- Run typecheck/build before final response.
+- Prefer small, clean components.
+- Keep user-facing wording direct and planner-friendly.

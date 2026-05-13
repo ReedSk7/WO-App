@@ -1,0 +1,1 @@
+export default function FieldBuilderPage(){return <div className='card'>Maximo-Style Field Builder with editable copyable notes for Long Description, Task, Craft, Materials, Tools, Clearance, PMT, and Reviewer notes (demo placeholders).</div>}

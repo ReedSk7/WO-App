@@ -1,0 +1,14 @@
+import type { CRIntake, DraftSection, DraftStatus, TemplateSettings, WorkOrderDraft } from '../types';
+const weak = (v:string)=>v.trim().length<8;
+export const missingInfo = (i:CRIntake)=>{
+  const m:string[]=[]; if(!i.crNumber)m.push('Missing CR number'); if(!i.assetNumber)m.push('Missing asset number'); if(!i.componentDescription)m.push('Missing component description'); if(!i.location)m.push('Missing location'); if(weak(i.problemStatement))m.push('Unclear problem statement'); if(weak(i.requestedAction))m.push('Unclear requested action'); m.push('Missing acceptance criteria'); m.push('Missing PMT requirement'); if(i.requiresParts)m.push('Missing parts information when parts toggle is selected'); if(i.requiresClearance)m.push('Clearance boundary not defined when clearance toggle is selected'); if(i.requiresEngineeringInput)m.push('Engineering input needed when engineering toggle is selected'); return m;
+};
+export const makeDraft = (intake:CRIntake, templates:TemplateSettings):WorkOrderDraft=>{
+  const miss=missingInfo(intake);
+  const status:DraftStatus = miss.length ? 'Needs Info' : 'Review Ready';
+  const sections:DraftSection[]=[
+['Work Order Summary',`${templates.draftDisclaimer} ${intake.crTitle||'Untitled CR'}`],
+['Problem Statement',intake.problemStatement||'[Problem statement required]'],['Scope of Work',intake.requestedAction||'[Requested action required]'],['Planning Basis','Use approved procedures and verified technical data only.'],['Prerequisites','[Prerequisites placeholder: approvals, permits, pre-job brief]'],['Safety and Human Performance Notes',templates.safetyNote],['Clearance / Tagging Considerations',intake.requiresClearance?templates.clearanceNote:'No clearance requested in intake. Verify applicability.'],['Tools and Test Equipment','[Tool list placeholder: verified equipment required]'],['Parts / Materials',intake.requiresParts?'[Parts required: planner to define approved materials]':'No parts requested in intake.'],['Labor / Craft Estimate','[Labor estimate placeholder: planner to validate by craft/task]'],['Step-by-Step Work Instructions','1) Validate scope and boundaries.\n2) Prepare approved instructions.\n3) Execute per approved package.'],['Acceptance Criteria Placeholder',templates.acceptanceCriteriaPlaceholder],['Post Maintenance Testing Placeholder',templates.pmtPlaceholder],['Documentation / Closeout Notes','Document as-left condition, deficiencies, and closeout references.'],['Assumptions and Missing Information',`${templates.missingInfoWarning}\n- ${miss.join('\n- ')}`],['Reviewer Comments',templates.reviewerNote]
+].map(([title,content],idx)=>({id:`s${idx}`,title,content}));
+  return { id: crypto.randomUUID(), title: intake.crTitle || 'Draft Work Order', crIntake:intake, sections, missingInfo:miss, status, checklist:[], createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+};
