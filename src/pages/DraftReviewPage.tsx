@@ -78,13 +78,20 @@ export default function DraftReviewPage() {
   const copySection = (section: DraftSection) => copyText(section.content, `${section.title} copied`);
 
   const metadata = (
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-      <MetaItem label="CR" mono value={normalizedDraft.crIntake.crNumber || 'Missing'} />
-      <MetaItem label="Asset" mono value={normalizedDraft.crIntake.assetNumber || 'Missing'} />
-      <MetaItem label="Location" value={normalizedDraft.crIntake.location || 'Missing'} />
-      <MetaItem label="Missing info" value={normalizedDraft.missingInfo.length} />
-      <MetaItem label="Checklist" value={`${normalizedDraft.checklistPercent}%`} />
-    </dl>
+    <div className="space-y-3">
+      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+        <MetaItem label="CR" mono value={normalizedDraft.crIntake.crNumber || 'Missing'} />
+        <MetaItem label="Asset" mono value={normalizedDraft.crIntake.assetNumber || 'Missing'} />
+        <MetaItem label="Discipline" value={normalizedDraft.crIntake.discipline} />
+        <MetaItem label="Work Type" value={normalizedDraft.crIntake.workType} />
+        <MetaItem label="Location" value={normalizedDraft.crIntake.location || 'Missing'} />
+        <MetaItem label="Missing info" value={normalizedDraft.missingInfo.length} />
+        <MetaItem label="Checklist" value={`${normalizedDraft.checklistPercent}%`} />
+      </dl>
+      <p className="text-sm font-semibold text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+        Draft for planner review only. Not approved work direction.
+      </p>
+    </div>
   );
 
   return (
@@ -103,6 +110,17 @@ export default function DraftReviewPage() {
       <PageContainer>
         <SafetyBanner />
         <DraftToolbar onCopy={copyFull} onExportJson={exportJson} onExportMarkdown={exportMarkdown} onPrint={() => window.print()} onSave={save} />
+        <nav aria-label="Draft section quick jumps" className="flex gap-2 overflow-x-auto rounded-panel border border-border-subtle bg-surface-light p-3 shadow-sm dark:bg-surface-dark xl:hidden">
+          {normalizedDraft.sections.map((section) => (
+            <a
+              className="shrink-0 rounded-full border border-border-subtle px-3 py-1.5 text-xs font-semibold text-texttone-secondaryLight hover:border-border-strong hover:text-texttone-primaryLight dark:text-texttone-secondaryDark dark:hover:text-texttone-primaryDark"
+              href={`#${section.id}`}
+              key={section.id}
+            >
+              {section.title}
+            </a>
+          ))}
+        </nav>
 
         <section className="grid gap-6 xl:grid-cols-[18rem_minmax(0,1fr)_22rem]">
           <nav aria-label="Draft section navigation" className="hidden xl:block">
