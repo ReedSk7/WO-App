@@ -1,3 +1,44 @@
 import { useState } from 'react';
+import { AppHeader } from '../components/layout/AppHeader';
+import { PageContainer } from '../components/layout/PageContainer';
+import { SettingsForm } from '../components/settings/SettingsForm';
+import { ToastRegion } from '../components/ui/ToastRegion';
 import { loadTemplates, saveTemplates } from '../storage/local';
-export default function SettingsPage(){const [t,setT]=useState(loadTemplates()); return <div className='space-y-3'><h2 className='text-xl font-semibold'>Template Editor</h2>{Object.entries(t).map(([k,v])=><label key={k} className='block text-sm'>{k}<textarea className='input min-h-16' value={v} onChange={e=>setT({...t,[k]:e.target.value})}/></label>)}<button className='btn' onClick={()=>saveTemplates(t)}>Save Settings</button><div className='card'><h3 className='font-semibold'>Future Integrations</h3><p>Future integration, not active</p>{['Copilot Studio agent URL placeholder','Power Automate webhook placeholder','Maximo API endpoint placeholder','Authentication placeholder','Environment name placeholder'].map(x=><input disabled key={x} className='input my-1' value={x} readOnly/> )}</div></div>}
+import type { DensityPreference, ThemePreference } from '../types';
+
+type SettingsPageProps = {
+  theme: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
+  density: DensityPreference;
+  setDensity: (density: DensityPreference) => void;
+};
+
+export default function SettingsPage({ theme, setTheme, density, setDensity }: SettingsPageProps) {
+  const [templates, setTemplates] = useState(loadTemplates());
+  const [toast, setToast] = useState<string | null>(null);
+  const save = () => {
+    saveTemplates(templates);
+    setToast('Settings saved');
+  };
+
+  return (
+    <>
+      <AppHeader
+        actions={<button className="btn" onClick={save} type="button">Save Settings</button>}
+        subtitle="Local template wording, theme, density, and inactive future integration placeholders."
+        title="Settings / Template Editor"
+      />
+      <PageContainer>
+        <SettingsForm
+          density={density}
+          onDensityChange={setDensity}
+          onTemplatesChange={setTemplates}
+          onThemeChange={setTheme}
+          templates={templates}
+          theme={theme}
+        />
+      </PageContainer>
+      <ToastRegion message={toast} />
+    </>
+  );
+}

@@ -1,10 +1,105 @@
-import type { TemplateSettings, WorkOrderDraft } from '../types';
+import type { ChecklistItem, CRIntake, DensityPreference, MissingInfoItem, TemplateSettings, ThemePreference, WorkOrderDraft } from '../types';
 import { defaultTemplates } from '../templates/defaults';
-const K={drafts:'woa_drafts',templates:'woa_templates',theme:'woa_theme'};
-export const loadDrafts=():WorkOrderDraft[]=>JSON.parse(localStorage.getItem(K.drafts)??'[]');
-export const saveDrafts=(d:WorkOrderDraft[])=>localStorage.setItem(K.drafts,JSON.stringify(d));
-export const upsertDraft=(draft:WorkOrderDraft)=>{const all=loadDrafts();const i=all.findIndex(x=>x.id===draft.id); if(i>=0) all[i]=draft; else all.unshift(draft); saveDrafts(all);};
-export const loadTemplates=():TemplateSettings=>({ ...defaultTemplates, ...(JSON.parse(localStorage.getItem(K.templates)??'{}'))});
-export const saveTemplates=(t:TemplateSettings)=>localStorage.setItem(K.templates,JSON.stringify(t));
-export const loadTheme=()=>localStorage.getItem(K.theme)??'light';
-export const saveTheme=(v:string)=>localStorage.setItem(K.theme,v);
+import { createDefaultChecklist } from '../utils/checklist';
+import { detectMissingInfo } from '../utils/draft';
+import { deriveDraftStatus } from '../utils/status';
+
+export const STORAGE_KEYS = {
+  theme: 'woac:v1:theme',
+  templates: 'woac:v1:template-settings',
+  drafts: 'woac:v1:drafts',
+  currentCR: 'woac:v1:current-cr',
+  currentDraftId: 'woac:v1:current-draft-id',
+  checklists: 'woac:v1:checklists',
+  density: 'woac:v1:ui-density',
+} as const;
+
+function canUseStorage() {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  if (!canUseStorage()) return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson<T>(key: string, value: T) {
+  if (!canUseStorage()) return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function normalizeMissingInfo(value: unknown, intake: CRIntake): MissingInfoItem[] {
+  if (Array.isArray(value) && value.every((item) => typeof item === 'object' && item !== null && 'severity' in item)) {
+    return value as MissingInfoItem[];
+  }
+  return detectMissingInfo(intake);
+}
+
+function normalizeDraft(draft: WorkOrderDraft): WorkOrderDraft {
+  const checklist = Array.isArray(draft.checklist) && draft.checklist.length > 0 ? draft.checklist : createDefaultChecklist();
+  const missingInfo = normalizeMissingInfo(draft.missingInfo, draft.crIntake);
+  const checklistPercent = typeof draft.checklistPercent === 'number' ? draft.checklistPercent : 0;
+  return {
+    ...draft,
+    checklist,
+    missingInfo,
+    checklistPercent,
+    status: deriveDraftStatus(missingInfo, checklistPercent),
+  };
+}
+
+export const loadDrafts = (): WorkOrderDraft[] => readJson<WorkOrderDraft[]>(STORAGE_KEYS.drafts, []).map(normalizeDraft);
+
+export const saveDrafts = (drafts: WorkOrderDraft[]) => writeJson(STORAGE_KEYS.drafts, drafts.map(normalizeDraft));
+
+export const loadDraft = (id?: string | null) => {
+  const drafts = loadDrafts();
+  if (id) return drafts.find((draft) => draft.id === id);
+  const currentId = loadCurrentDraftId();
+  return drafts.find((draft) => draft.id === currentId) ?? drafts[0];
+};
+
+export const upsertDraft = (draft: WorkOrderDraft) => {
+  const normalized = normalizeDraft({ ...draft, updatedAt: new Date().toISOString() });
+  const all = loadDrafts();
+  const index = all.findIndex((item) => item.id === normalized.id);
+  if (index >= 0) all[index] = normalized;
+  else all.unshift(normalized);
+  saveDrafts(all);
+  saveCurrentDraftId(normalized.id);
+  return normalized;
+};
+
+export const loadTemplates = (): TemplateSettings => ({ ...defaultTemplates, ...readJson<Partial<TemplateSettings>>(STORAGE_KEYS.templates, {}) });
+
+export const saveTemplates = (templates: TemplateSettings) => writeJson(STORAGE_KEYS.templates, templates);
+
+export const loadTheme = (): ThemePreference => readJson<ThemePreference>(STORAGE_KEYS.theme, 'light');
+
+export const saveTheme = (value: ThemePreference) => writeJson(STORAGE_KEYS.theme, value);
+
+export const loadDensity = (): DensityPreference => readJson<DensityPreference>(STORAGE_KEYS.density, 'comfortable');
+
+export const saveDensity = (value: DensityPreference) => writeJson(STORAGE_KEYS.density, value);
+
+export const loadCurrentCR = (): CRIntake | null => readJson<CRIntake | null>(STORAGE_KEYS.currentCR, null);
+
+export const saveCurrentCR = (value: CRIntake) => writeJson(STORAGE_KEYS.currentCR, value);
+
+export const loadCurrentDraftId = () => readJson<string | null>(STORAGE_KEYS.currentDraftId, null);
+
+export const saveCurrentDraftId = (id: string) => writeJson(STORAGE_KEYS.currentDraftId, id);
+
+export const loadChecklistMap = () => readJson<Record<string, ChecklistItem[]>>(STORAGE_KEYS.checklists, {});
+
+export const saveChecklistForDraft = (draftId: string, checklist: ChecklistItem[]) => {
+  const next = { ...loadChecklistMap(), [draftId]: checklist };
+  writeJson(STORAGE_KEYS.checklists, next);
+};
+
+export const loadChecklistForDraft = (draftId: string) => loadChecklistMap()[draftId] ?? createDefaultChecklist();
