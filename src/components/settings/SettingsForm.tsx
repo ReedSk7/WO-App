@@ -1,4 +1,5 @@
 import type { DensityPreference, TemplateSettings, ThemePreference } from '../../types';
+import { DeploymentInfo } from './DeploymentInfo';
 
 type SettingsFormProps = {
   templates: TemplateSettings;
@@ -32,6 +33,8 @@ export function SettingsForm({ templates, onTemplatesChange, theme, onThemeChang
       </section>
 
       <aside className="space-y-6">
+        <DeploymentInfo />
+
         <section className="rounded-panel border border-border-subtle bg-surface-light p-6 shadow-panel dark:bg-surface-dark">
           <h2 className="text-xl font-semibold leading-7">Appearance</h2>
           <div className="mt-5 space-y-4">

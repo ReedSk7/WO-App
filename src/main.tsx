@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { BrowserRouter, HashRouter } from 'react-router-dom';
 import App from './App';
 import { STORAGE_KEYS } from './storage/local';
 import './index.css';
@@ -16,10 +16,14 @@ try {
   document.documentElement.classList.remove('dark');
 }
 
+const deployTarget = import.meta.env.VITE_DEPLOY_TARGET;
+const Router = deployTarget === 'github-pages' ? HashRouter : BrowserRouter;
+const browserBasename = deployTarget === 'github-pages' ? undefined : import.meta.env.BASE_URL;
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+    <Router basename={browserBasename} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
       <App />
-    </BrowserRouter>
+    </Router>
   </React.StrictMode>,
 );
