@@ -8,6 +8,9 @@ The app is intentionally simple:
 - One response-mode selector for draft creation, draft review, planning-basis research, or general guidance
 - One `Analyze` action
 - One result screen with Maximo-style top tabs
+- Generated baseline text beside planner-editable text
+- Change summary before copy/paste
+- Local save/resume for in-progress planner edits
 - Fake/demo sample data only
 - No backend, auth, analytics, external AI calls, Maximo connection, Copilot Studio connection, or Power Automate connection
 - Every generated package includes: `Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.`
@@ -36,6 +39,16 @@ The mode selector changes the planner guidance in the generated package while ke
 - `General Guidance`: concise planning-process guidance with source and uncertainty limits
 
 All modes separate facts, assumptions, missing information, risks, and planner next actions.
+
+## Planner Edit Review
+
+Each Maximo-style tab shows:
+
+- `Generated output`: the original agent-generated baseline
+- `Planner edited version`: the editable planner copy
+- `Changes before copy/paste`: added, removed, and changed line summary
+
+Use `Save progress` to keep the generated baseline and planner edits in the current browser's local storage. The input screen shows `Resume saved progress` when a saved review session exists.
 
 ## Maximo-Style Tabs
 

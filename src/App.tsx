@@ -1,13 +1,82 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_RESPONSE_MODE, PLANNER_RESPONSE_MODES } from './data/agentGuidance';
 import { MAXIMO_TABS } from './data/plannerSamples';
+import { ToastRegion } from './components/ui/ToastRegion';
+import { useClipboard } from './hooks/useClipboard';
 import { useTheme } from './hooks/useTheme';
-import type { MaximoTabId, PlannerPackage, PlannerResponseMode, PlannerTabContent } from './types';
+import { loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
+import type { MaximoTabId, PlannerPackage, PlannerResponseMode, PlannerReviewSession, PlannerTabEdits, PlannerTabContent } from './types';
 import { PLANNER_DISCLAIMER, createPlannerPackage } from './utils/plannerPackage';
 
 type ScreenState = 'input' | 'result';
 
 const exampleInputs = ['DEMO-CR-1001', 'DEMO-MPL-2001', 'DEMO-WO-3001'];
+
+type ChangeSummary = {
+  added: number;
+  removed: number;
+  changed: number;
+  total: number;
+  details: string[];
+};
+
+function generatedTabText(tab: PlannerTabContent) {
+  return tab.lines.join('\n');
+}
+
+function createInitialTabEdits(plannerPackage: PlannerPackage): PlannerTabEdits {
+  return plannerPackage.tabs.reduce<PlannerTabEdits>((edits, tab) => {
+    edits[tab.id] = generatedTabText(tab);
+    return edits;
+  }, {});
+}
+
+function editedTextFor(tab: PlannerTabContent, tabEdits: PlannerTabEdits) {
+  return tabEdits[tab.id] ?? generatedTabText(tab);
+}
+
+function summarizeTextChanges(generatedText: string, editedText: string): ChangeSummary {
+  const generatedLines = generatedText.split(/\r?\n/);
+  const editedLines = editedText.split(/\r?\n/);
+  const maxLines = Math.max(generatedLines.length, editedLines.length);
+  const details: string[] = [];
+  let added = 0;
+  let removed = 0;
+  let changed = 0;
+
+  for (let index = 0; index < maxLines; index += 1) {
+    const generated = generatedLines[index] ?? '';
+    const edited = editedLines[index] ?? '';
+    if (generated === edited) continue;
+
+    const lineNumber = index + 1;
+    if (!generated && edited) {
+      added += 1;
+      details.push(`Line ${lineNumber} added: ${edited}`);
+    } else if (generated && !edited) {
+      removed += 1;
+      details.push(`Line ${lineNumber} removed: ${generated}`);
+    } else {
+      changed += 1;
+      details.push(`Line ${lineNumber} changed from "${generated}" to "${edited}"`);
+    }
+  }
+
+  return { added, removed, changed, total: added + removed + changed, details: details.slice(0, 6) };
+}
+
+function changedTabsFor(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdits) {
+  return plannerPackage.tabs.filter((tab) => editedTextFor(tab, tabEdits).trim() !== generatedTabText(tab).trim());
+}
+
+function formatEditedPackage(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdits) {
+  return plannerPackage.tabs.map((tab) => `## ${tab.label}\n\n${editedTextFor(tab, tabEdits)}`).join('\n\n');
+}
+
+function makeReviewSessionId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `review-${Date.now()}`;
+}
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
   return (
@@ -98,7 +167,21 @@ function TabButton({
   );
 }
 
-function TabPanel({ tab }: { tab: PlannerTabContent }) {
+function EditableTabPanel({
+  tab,
+  tabEdits,
+  changedTabCount,
+  onEditChange,
+}: {
+  tab: PlannerTabContent;
+  tabEdits: PlannerTabEdits;
+  changedTabCount: number;
+  onEditChange: (tabId: MaximoTabId, value: string) => void;
+}) {
+  const generatedText = generatedTabText(tab);
+  const editedText = editedTextFor(tab, tabEdits);
+  const summary = summarizeTextChanges(generatedText, editedText);
+
   return (
     <section
       aria-labelledby={`tab-${tab.id}`}
@@ -106,27 +189,60 @@ function TabPanel({ tab }: { tab: PlannerTabContent }) {
       id={`tabpanel-${tab.id}`}
       role="tabpanel"
     >
-      <h2 className="text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{tab.label}</h2>
-      <div className="mt-4 space-y-3 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
-        {tab.lines.map((line) => {
-          const isGroupHeading = line.endsWith(':');
-          const isBullet = line.startsWith('- ');
-          return (
-            <p
-              className={
-                isGroupHeading
-                  ? 'mt-5 font-semibold'
-                  : isBullet
-                    ? 'pl-4 text-texttone-secondaryLight dark:text-texttone-secondaryDark'
-                    : undefined
-              }
-              key={line}
-            >
-              {line}
-            </p>
-          );
-        })}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{tab.label}</h2>
+          <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            Compare the generated baseline against planner edits before copying into the work package.
+          </p>
+        </div>
+        <div className="rounded-md border border-border-subtle bg-surface-raisedLight px-3 py-2 text-xs font-semibold text-texttone-secondaryLight dark:bg-surface-raisedDark dark:text-texttone-secondaryDark">
+          Changed tabs: {changedTabCount}
+        </div>
       </div>
+
+      <div className="mt-5 grid gap-4 xl:grid-cols-2">
+        <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
+          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Generated output</h3>
+          <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-light p-3 text-sm leading-6 text-texttone-primaryLight dark:bg-surface-dark dark:text-texttone-primaryDark">
+            {generatedText}
+          </pre>
+        </section>
+
+        <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
+          <label className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark" htmlFor={`edit-${tab.id}`}>
+            Planner edited version
+          </label>
+          <textarea
+            aria-label={`Planner edited version for ${tab.label}`}
+            className="input mt-3 min-h-[28rem] resize-y font-mono text-sm leading-6"
+            id={`edit-${tab.id}`}
+            onChange={(event) => onEditChange(tab.id, event.target.value)}
+            value={editedText}
+          />
+        </section>
+      </div>
+
+      <section className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" aria-label={`Changes for ${tab.label}`}>
+        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Changes before copy/paste</h3>
+        {summary.total === 0 ? (
+          <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">No planner edits on this tab yet.</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+              Added: {summary.added} | Removed: {summary.removed} | Changed: {summary.changed}
+            </p>
+            <ul className="mt-3 space-y-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+              {summary.details.map((detail) => (
+                <li className="flex gap-2" key={detail}>
+                  <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-status-caution" />
+                  <span>{detail}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </section>
   );
 }
@@ -135,15 +251,19 @@ function InputScreen({
   input,
   error,
   selectedMode,
+  savedSession,
   onInputChange,
   onModeChange,
+  onResumeSaved,
   onAnalyze,
 }: {
   input: string;
   error: string;
   selectedMode: PlannerResponseMode;
+  savedSession: PlannerReviewSession | null;
   onInputChange: (value: string) => void;
   onModeChange: (mode: PlannerResponseMode) => void;
+  onResumeSaved: () => void;
   onAnalyze: () => void;
 }) {
   return (
@@ -177,6 +297,23 @@ function InputScreen({
           <p className="helper mt-2" id="planner-input-help">
             Sample inputs: {exampleInputs.join(', ')}. Use fictional/demo information only.
           </p>
+          {savedSession ? (
+            <div className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
+                    Saved edit session: {savedSession.plannerPackage.recordNumber}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+                    Last saved {new Date(savedSession.updatedAt).toLocaleString()} with mode {savedSession.plannerPackage.modeLabel}.
+                  </p>
+                </div>
+                <button className="btn-secondary w-full sm:w-auto" onClick={onResumeSaved} type="button">
+                  Resume saved progress
+                </button>
+              </div>
+            </div>
+          ) : null}
           {error ? (
             <p className="mt-3 rounded-md border border-status-danger/40 bg-status-danger/10 px-3 py-2 text-sm font-semibold text-status-danger" id="planner-input-error">
               {error}
@@ -238,18 +375,29 @@ function AssistantGuidancePanel({ plannerPackage }: { plannerPackage: PlannerPac
 function ResultScreen({
   activeTabId,
   plannerPackage,
+  tabEdits,
   onActiveTabChange,
+  onCopyEditedPackage,
+  onCopyEditedTab,
+  onEditChange,
+  onSaveProgress,
   onStartOver,
 }: {
   activeTabId: MaximoTabId;
   plannerPackage: PlannerPackage;
+  tabEdits: PlannerTabEdits;
   onActiveTabChange: (tabId: MaximoTabId) => void;
+  onCopyEditedPackage: () => void;
+  onCopyEditedTab: () => void;
+  onEditChange: (tabId: MaximoTabId, value: string) => void;
+  onSaveProgress: () => void;
   onStartOver: () => void;
 }) {
   const activeTab = useMemo(
     () => plannerPackage.tabs.find((tab) => tab.id === activeTabId) ?? plannerPackage.tabs[0],
     [activeTabId, plannerPackage.tabs],
   );
+  const changedTabs = changedTabsFor(plannerPackage, tabEdits);
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-workbench px-4 py-6 sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
@@ -264,9 +412,20 @@ function ResultScreen({
               {plannerPackage.recordType} record: {plannerPackage.recordNumber}
             </p>
           </div>
-          <button className="btn-secondary w-full sm:w-auto" onClick={onStartOver} type="button">
-            Start over
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+            <button className="btn-secondary w-full sm:w-auto" onClick={onCopyEditedTab} type="button">
+              Copy edited tab
+            </button>
+            <button className="btn-secondary w-full sm:w-auto" onClick={onCopyEditedPackage} type="button">
+              Copy edited package
+            </button>
+            <button className="btn w-full sm:w-auto" onClick={onSaveProgress} type="button">
+              Save progress
+            </button>
+            <button className="btn-secondary w-full sm:w-auto" onClick={onStartOver} type="button">
+              Start over
+            </button>
+          </div>
         </header>
 
         <section className="rounded-md border border-status-warning/60 bg-status-warning/15 p-4 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
@@ -281,6 +440,29 @@ function ResultScreen({
         </section>
 
         <AssistantGuidancePanel plannerPackage={plannerPackage} />
+
+        <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Planner edit summary">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Planner edit summary</h2>
+              <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+                Saved sessions preserve generated baseline text and planner edits for later review.
+              </p>
+            </div>
+            <p className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
+              Changed tabs: {changedTabs.length}
+            </p>
+          </div>
+          {changedTabs.length > 0 ? (
+            <p className="mt-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+              Edited tabs: {changedTabs.map((tab) => tab.label).join(', ')}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+              No planner edits have been made yet.
+            </p>
+          )}
+        </section>
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <ReviewList items={plannerPackage.knownFacts} title="Known Conditions" />
@@ -300,7 +482,7 @@ function ResultScreen({
               <TabButton active={tab.id === activeTab.id} key={tab.id} label={tab.label} onClick={onActiveTabChange} tabId={tab.id} />
             ))}
           </div>
-          <TabPanel tab={activeTab} />
+          <EditableTabPanel changedTabCount={changedTabs.length} onEditChange={onEditChange} tab={activeTab} tabEdits={tabEdits} />
         </section>
       </div>
     </main>
@@ -309,6 +491,16 @@ function ResultScreen({
 
 export default function App() {
   useTheme();
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(message: string) {
+    setToast(message);
+    window.setTimeout(() => {
+      setToast((current) => (current === message ? null : current));
+    }, 1800);
+  }
+
+  const { copyText, copiedLabel } = useClipboard(showToast);
 
   const [screen, setScreen] = useState<ScreenState>('input');
   const [input, setInput] = useState('');
@@ -316,6 +508,10 @@ export default function App() {
   const [selectedMode, setSelectedMode] = useState<PlannerResponseMode>(DEFAULT_RESPONSE_MODE);
   const [activeTabId, setActiveTabId] = useState<MaximoTabId>('workorder');
   const [plannerPackage, setPlannerPackage] = useState<PlannerPackage | null>(null);
+  const [tabEdits, setTabEdits] = useState<PlannerTabEdits>({});
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
+  const [reviewCreatedAt, setReviewCreatedAt] = useState<string | null>(null);
+  const [savedSession, setSavedSession] = useState<PlannerReviewSession | null>(() => loadCurrentPlannerReviewSession());
 
   function analyzeInput() {
     if (!input.trim()) {
@@ -324,16 +520,70 @@ export default function App() {
     }
 
     setError('');
-    setPlannerPackage(createPlannerPackage(input, new Date(), selectedMode));
+    const nextPackage = createPlannerPackage(input, new Date(), selectedMode);
+    setPlannerPackage(nextPackage);
+    setTabEdits(createInitialTabEdits(nextPackage));
+    setReviewSessionId(null);
+    setReviewCreatedAt(nextPackage.generatedAt);
     setActiveTabId('workorder');
     setScreen('result');
+  }
+
+  function resumeSavedProgress() {
+    const session = savedSession ?? loadCurrentPlannerReviewSession();
+    if (!session) return;
+    setPlannerPackage(session.plannerPackage);
+    setTabEdits(session.tabEdits);
+    setReviewSessionId(session.id);
+    setReviewCreatedAt(session.createdAt);
+    setActiveTabId(session.activeTabId);
+    setInput(session.plannerPackage.input);
+    setSelectedMode(session.plannerPackage.mode);
+    setScreen('result');
+    showToast('Saved progress loaded');
+  }
+
+  function updateTabEdit(tabId: MaximoTabId, value: string) {
+    setTabEdits((current) => ({ ...current, [tabId]: value }));
+  }
+
+  function saveProgress() {
+    if (!plannerPackage) return;
+    const now = new Date().toISOString();
+    const session = upsertPlannerReviewSession({
+      id: reviewSessionId ?? makeReviewSessionId(),
+      plannerPackage,
+      tabEdits,
+      activeTabId,
+      createdAt: reviewCreatedAt ?? plannerPackage.generatedAt,
+      updatedAt: now,
+    });
+    setReviewSessionId(session.id);
+    setReviewCreatedAt(session.createdAt);
+    setSavedSession(session);
+    showToast('Progress saved');
+  }
+
+  function copyEditedTab() {
+    if (!plannerPackage) return;
+    const activeTab = plannerPackage.tabs.find((tab) => tab.id === activeTabId) ?? plannerPackage.tabs[0];
+    void copyText(editedTextFor(activeTab, tabEdits), `${activeTab.label} edited text copied`);
+  }
+
+  function copyEditedPackage() {
+    if (!plannerPackage) return;
+    void copyText(formatEditedPackage(plannerPackage, tabEdits), 'Edited package copied');
   }
 
   function startOver() {
     setScreen('input');
     setPlannerPackage(null);
+    setTabEdits({});
+    setReviewSessionId(null);
+    setReviewCreatedAt(null);
     setActiveTabId('workorder');
     setError('');
+    setSavedSession(loadCurrentPlannerReviewSession());
   }
 
   return (
@@ -348,8 +598,13 @@ export default function App() {
         <ResultScreen
           activeTabId={activeTabId}
           onActiveTabChange={setActiveTabId}
+          onCopyEditedPackage={copyEditedPackage}
+          onCopyEditedTab={copyEditedTab}
+          onEditChange={updateTabEdit}
+          onSaveProgress={saveProgress}
           onStartOver={startOver}
           plannerPackage={plannerPackage}
+          tabEdits={tabEdits}
         />
       ) : (
         <InputScreen
@@ -358,9 +613,12 @@ export default function App() {
           onAnalyze={analyzeInput}
           onInputChange={setInput}
           onModeChange={setSelectedMode}
+          onResumeSaved={resumeSavedProgress}
+          savedSession={savedSession}
           selectedMode={selectedMode}
         />
       )}
+      <ToastRegion message={toast ?? copiedLabel} />
     </div>
   );
 }

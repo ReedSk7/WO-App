@@ -1,4 +1,14 @@
-import type { ChecklistItem, CRIntake, DensityPreference, MissingInfoItem, TemplateSettings, ThemePreference, WorkOrderDraft } from '../types';
+import type {
+  ChecklistItem,
+  CRIntake,
+  DensityPreference,
+  MaximoTabId,
+  MissingInfoItem,
+  PlannerReviewSession,
+  TemplateSettings,
+  ThemePreference,
+  WorkOrderDraft,
+} from '../types';
 import { defaultTemplates } from '../templates/defaults';
 import { createDefaultChecklist } from '../utils/checklist';
 import { detectMissingInfo } from '../utils/draft';
@@ -12,6 +22,8 @@ export const STORAGE_KEYS = {
   currentDraftId: 'woac:v1:current-draft-id',
   checklists: 'woac:v1:checklists',
   density: 'woac:v1:ui-density',
+  plannerReviewSessions: 'woac:v1:planner-review-sessions',
+  currentPlannerReviewSessionId: 'woac:v1:current-planner-review-session-id',
 } as const;
 
 function canUseStorage() {
@@ -103,3 +115,47 @@ export const saveChecklistForDraft = (draftId: string, checklist: ChecklistItem[
 };
 
 export const loadChecklistForDraft = (draftId: string) => loadChecklistMap()[draftId] ?? createDefaultChecklist();
+
+function generatedTabText(session: PlannerReviewSession, tabId: MaximoTabId) {
+  return session.plannerPackage.tabs.find((tab) => tab.id === tabId)?.lines.join('\n') ?? '';
+}
+
+function normalizePlannerReviewSession(session: PlannerReviewSession): PlannerReviewSession {
+  const tabEdits = session.plannerPackage.tabs.reduce<PlannerReviewSession['tabEdits']>((current, tab) => {
+    current[tab.id] = typeof session.tabEdits?.[tab.id] === 'string' ? session.tabEdits[tab.id] : generatedTabText(session, tab.id);
+    return current;
+  }, {});
+
+  return {
+    ...session,
+    tabEdits,
+    activeTabId: session.activeTabId ?? session.plannerPackage.tabs[0]?.id ?? 'workorder',
+  };
+}
+
+export const loadPlannerReviewSessions = (): PlannerReviewSession[] =>
+  readJson<PlannerReviewSession[]>(STORAGE_KEYS.plannerReviewSessions, []).map(normalizePlannerReviewSession);
+
+export const savePlannerReviewSessions = (sessions: PlannerReviewSession[]) =>
+  writeJson(STORAGE_KEYS.plannerReviewSessions, sessions.map(normalizePlannerReviewSession));
+
+export const loadCurrentPlannerReviewSessionId = () => readJson<string | null>(STORAGE_KEYS.currentPlannerReviewSessionId, null);
+
+export const saveCurrentPlannerReviewSessionId = (id: string) => writeJson(STORAGE_KEYS.currentPlannerReviewSessionId, id);
+
+export const loadCurrentPlannerReviewSession = () => {
+  const sessions = loadPlannerReviewSessions();
+  const currentId = loadCurrentPlannerReviewSessionId();
+  return sessions.find((session) => session.id === currentId) ?? sessions[0] ?? null;
+};
+
+export const upsertPlannerReviewSession = (session: PlannerReviewSession) => {
+  const normalized = normalizePlannerReviewSession({ ...session, updatedAt: new Date().toISOString() });
+  const sessions = loadPlannerReviewSessions();
+  const index = sessions.findIndex((item) => item.id === normalized.id);
+  if (index >= 0) sessions[index] = normalized;
+  else sessions.unshift(normalized);
+  savePlannerReviewSessions(sessions);
+  saveCurrentPlannerReviewSessionId(normalized.id);
+  return normalized;
+};

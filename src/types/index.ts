@@ -173,3 +173,14 @@ export interface PlannerPackage {
   assistantGuidance: PlannerAssistantGuidance;
   tabs: PlannerTabContent[];
 }
+
+export type PlannerTabEdits = Partial<Record<MaximoTabId, string>>;
+
+export interface PlannerReviewSession {
+  id: string;
+  plannerPackage: PlannerPackage;
+  tabEdits: PlannerTabEdits;
+  activeTabId: MaximoTabId;
+  createdAt: string;
+  updatedAt: string;
+}
