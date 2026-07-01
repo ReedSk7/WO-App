@@ -6,71 +6,35 @@ import { useClipboard } from './hooks/useClipboard';
 import { useTheme } from './hooks/useTheme';
 import { loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
 import type { MaximoTabId, PlannerPackage, PlannerResponseMode, PlannerReviewSession, PlannerTabEdits, PlannerTabContent } from './types';
+import { downloadTextFile } from './utils/export';
 import { PLANNER_DISCLAIMER, createPlannerPackage } from './utils/plannerPackage';
+import {
+  agentGeneratedText,
+  createRefinementReport,
+  formatRefinementReportJson,
+  formatRefinementReportMarkdown,
+  plannerFinalText,
+  refinementReportFileStem,
+  summarizeRefinementTab,
+} from './utils/refinementReport';
 
 type ScreenState = 'input' | 'result';
 
 const exampleInputs = ['DEMO-CR-1001', 'DEMO-MPL-2001', 'DEMO-WO-3001'];
 
-type ChangeSummary = {
-  added: number;
-  removed: number;
-  changed: number;
-  total: number;
-  details: string[];
-};
-
-function generatedTabText(tab: PlannerTabContent) {
-  return tab.lines.join('\n');
-}
-
 function createInitialTabEdits(plannerPackage: PlannerPackage): PlannerTabEdits {
   return plannerPackage.tabs.reduce<PlannerTabEdits>((edits, tab) => {
-    edits[tab.id] = generatedTabText(tab);
+    edits[tab.id] = agentGeneratedText(tab);
     return edits;
   }, {});
 }
 
-function editedTextFor(tab: PlannerTabContent, tabEdits: PlannerTabEdits) {
-  return tabEdits[tab.id] ?? generatedTabText(tab);
-}
-
-function summarizeTextChanges(generatedText: string, editedText: string): ChangeSummary {
-  const generatedLines = generatedText.split(/\r?\n/);
-  const editedLines = editedText.split(/\r?\n/);
-  const maxLines = Math.max(generatedLines.length, editedLines.length);
-  const details: string[] = [];
-  let added = 0;
-  let removed = 0;
-  let changed = 0;
-
-  for (let index = 0; index < maxLines; index += 1) {
-    const generated = generatedLines[index] ?? '';
-    const edited = editedLines[index] ?? '';
-    if (generated === edited) continue;
-
-    const lineNumber = index + 1;
-    if (!generated && edited) {
-      added += 1;
-      details.push(`Line ${lineNumber} added: ${edited}`);
-    } else if (generated && !edited) {
-      removed += 1;
-      details.push(`Line ${lineNumber} removed: ${generated}`);
-    } else {
-      changed += 1;
-      details.push(`Line ${lineNumber} changed from "${generated}" to "${edited}"`);
-    }
-  }
-
-  return { added, removed, changed, total: added + removed + changed, details: details.slice(0, 6) };
-}
-
 function changedTabsFor(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdits) {
-  return plannerPackage.tabs.filter((tab) => editedTextFor(tab, tabEdits).trim() !== generatedTabText(tab).trim());
+  return plannerPackage.tabs.filter((tab) => plannerFinalText(tab, tabEdits).trim() !== agentGeneratedText(tab).trim());
 }
 
 function formatEditedPackage(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdits) {
-  return plannerPackage.tabs.map((tab) => `## ${tab.label}\n\n${editedTextFor(tab, tabEdits)}`).join('\n\n');
+  return plannerPackage.tabs.map((tab) => `## ${tab.label}\n\n${plannerFinalText(tab, tabEdits)}`).join('\n\n');
 }
 
 function makeReviewSessionId() {
@@ -178,9 +142,11 @@ function EditableTabPanel({
   changedTabCount: number;
   onEditChange: (tabId: MaximoTabId, value: string) => void;
 }) {
-  const generatedText = generatedTabText(tab);
-  const editedText = editedTextFor(tab, tabEdits);
-  const summary = summarizeTextChanges(generatedText, editedText);
+  const generatedText = agentGeneratedText(tab);
+  const finalText = plannerFinalText(tab, tabEdits);
+  const summary = summarizeRefinementTab(tab, tabEdits);
+  const changeTotal = summary.added + summary.removed + summary.edited;
+  const details = summary.changes.slice(0, 6);
 
   return (
     <section
@@ -193,7 +159,7 @@ function EditableTabPanel({
         <div>
           <h2 className="text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{tab.label}</h2>
           <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-            Compare the generated baseline against planner edits before copying into the work package.
+            Compare the agent baseline against the planner final text before copying into the work package.
           </p>
         </div>
         <div className="rounded-md border border-border-subtle bg-surface-raisedLight px-3 py-2 text-xs font-semibold text-texttone-secondaryLight dark:bg-surface-raisedDark dark:text-texttone-secondaryDark">
@@ -203,42 +169,52 @@ function EditableTabPanel({
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
-          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Generated output</h3>
+          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Agent generated baseline</h3>
           <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-light p-3 text-sm leading-6 text-texttone-primaryLight dark:bg-surface-dark dark:text-texttone-primaryDark">
             {generatedText}
           </pre>
         </section>
 
         <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
-          <label className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark" htmlFor={`edit-${tab.id}`}>
-            Planner edited version
+          <label className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark" htmlFor={`final-${tab.id}`}>
+            Planner final text for copy/paste
           </label>
           <textarea
-            aria-label={`Planner edited version for ${tab.label}`}
+            aria-label={`Planner final text for copy/paste for ${tab.label}`}
             className="input mt-3 min-h-[28rem] resize-y font-mono text-sm leading-6"
-            id={`edit-${tab.id}`}
+            id={`final-${tab.id}`}
             onChange={(event) => onEditChange(tab.id, event.target.value)}
-            value={editedText}
+            value={finalText}
           />
         </section>
       </div>
 
       <section className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" aria-label={`Changes for ${tab.label}`}>
-        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Changes before copy/paste</h3>
-        {summary.total === 0 ? (
-          <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">No planner edits on this tab yet.</p>
+        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">What changed for agent refinement</h3>
+        {changeTotal === 0 ? (
+          <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            All {summary.kept} agent-generated lines are currently kept for copy/paste.
+          </p>
         ) : (
           <>
             <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              Added: {summary.added} | Removed: {summary.removed} | Changed: {summary.changed}
+              Kept: {summary.kept} | Removed: {summary.removed} | Added: {summary.added} | Edited: {summary.edited}
             </p>
             <ul className="mt-3 space-y-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              {summary.details.map((detail) => (
-                <li className="flex gap-2" key={detail}>
-                  <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-status-caution" />
-                  <span>{detail}</span>
-                </li>
-              ))}
+              {details.map((change) => {
+                const label =
+                  change.type === 'added'
+                    ? `Line ${change.lineNumber} added: ${change.plannerFinal}`
+                    : change.type === 'removed'
+                      ? `Line ${change.lineNumber} removed: ${change.agentGenerated}`
+                      : `Line ${change.lineNumber} edited from "${change.agentGenerated}" to "${change.plannerFinal}"`;
+                return (
+                  <li className="flex gap-2" key={`${change.type}-${change.lineNumber}`}>
+                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-status-caution" />
+                    <span>{label}</span>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
@@ -380,6 +356,8 @@ function ResultScreen({
   onCopyEditedPackage,
   onCopyEditedTab,
   onEditChange,
+  onExportJson,
+  onExportMarkdown,
   onSaveProgress,
   onStartOver,
 }: {
@@ -390,6 +368,8 @@ function ResultScreen({
   onCopyEditedPackage: () => void;
   onCopyEditedTab: () => void;
   onEditChange: (tabId: MaximoTabId, value: string) => void;
+  onExportJson: () => void;
+  onExportMarkdown: () => void;
   onSaveProgress: () => void;
   onStartOver: () => void;
 }) {
@@ -398,6 +378,7 @@ function ResultScreen({
     [activeTabId, plannerPackage.tabs],
   );
   const changedTabs = changedTabsFor(plannerPackage, tabEdits);
+  const refinementReport = createRefinementReport(plannerPackage, tabEdits, 'active-session');
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-workbench px-4 py-6 sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
@@ -421,6 +402,12 @@ function ResultScreen({
             </button>
             <button className="btn w-full sm:w-auto" onClick={onSaveProgress} type="button">
               Save progress
+            </button>
+            <button className="btn-secondary w-full sm:w-auto" onClick={onExportJson} type="button">
+              Export refinement JSON
+            </button>
+            <button className="btn-secondary w-full sm:w-auto" onClick={onExportMarkdown} type="button">
+              Export refinement Markdown
             </button>
             <button className="btn-secondary w-full sm:w-auto" onClick={onStartOver} type="button">
               Start over
@@ -446,7 +433,7 @@ function ResultScreen({
             <div>
               <h2 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Planner edit summary</h2>
               <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-                Saved sessions preserve generated baseline text and planner edits for later review.
+                Saved sessions preserve agent baseline text and planner final text for later review.
               </p>
             </div>
             <p className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
@@ -459,9 +446,27 @@ function ResultScreen({
             </p>
           ) : (
             <p className="mt-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              No planner edits have been made yet.
+              No planner final text changes have been made yet.
             </p>
           )}
+          <dl className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
+              <dt className="label">Kept</dt>
+              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.kept}</dd>
+            </div>
+            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
+              <dt className="label">Removed</dt>
+              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.removed}</dd>
+            </div>
+            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
+              <dt className="label">Added</dt>
+              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.added}</dd>
+            </div>
+            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
+              <dt className="label">Edited</dt>
+              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.edited}</dd>
+            </div>
+          </dl>
         </section>
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
@@ -567,12 +572,31 @@ export default function App() {
   function copyEditedTab() {
     if (!plannerPackage) return;
     const activeTab = plannerPackage.tabs.find((tab) => tab.id === activeTabId) ?? plannerPackage.tabs[0];
-    void copyText(editedTextFor(activeTab, tabEdits), `${activeTab.label} edited text copied`);
+    void copyText(plannerFinalText(activeTab, tabEdits), `${activeTab.label} planner final text copied`);
   }
 
   function copyEditedPackage() {
     if (!plannerPackage) return;
-    void copyText(formatEditedPackage(plannerPackage, tabEdits), 'Edited package copied');
+    void copyText(formatEditedPackage(plannerPackage, tabEdits), 'Planner final package copied');
+  }
+
+  function currentRefinementReport() {
+    if (!plannerPackage) return null;
+    return createRefinementReport(plannerPackage, tabEdits, reviewSessionId ?? 'unsaved-session');
+  }
+
+  function exportRefinementJson() {
+    const report = currentRefinementReport();
+    if (!report) return;
+    downloadTextFile(`${refinementReportFileStem(report)}.json`, formatRefinementReportJson(report), 'application/json');
+    showToast('Refinement JSON exported');
+  }
+
+  function exportRefinementMarkdown() {
+    const report = currentRefinementReport();
+    if (!report) return;
+    downloadTextFile(`${refinementReportFileStem(report)}.md`, formatRefinementReportMarkdown(report), 'text/markdown');
+    showToast('Refinement Markdown exported');
   }
 
   function startOver() {
@@ -601,6 +625,8 @@ export default function App() {
           onCopyEditedPackage={copyEditedPackage}
           onCopyEditedTab={copyEditedTab}
           onEditChange={updateTabEdit}
+          onExportJson={exportRefinementJson}
+          onExportMarkdown={exportRefinementMarkdown}
           onSaveProgress={saveProgress}
           onStartOver={startOver}
           plannerPackage={plannerPackage}

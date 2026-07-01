@@ -8,9 +8,10 @@ The app is intentionally simple:
 - One response-mode selector for draft creation, draft review, planning-basis research, or general guidance
 - One `Analyze` action
 - One result screen with Maximo-style top tabs
-- Generated baseline text beside planner-editable text
-- Change summary before copy/paste
+- Agent generated baseline beside planner final text for copy/paste
+- Refinement summary showing what was kept, removed, added, or edited
 - Local save/resume for in-progress planner edits
+- Exportable refinement reports in JSON or Markdown
 - Fake/demo sample data only
 - No backend, auth, analytics, external AI calls, Maximo connection, Copilot Studio connection, or Power Automate connection
 - Every generated package includes: `Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.`
@@ -44,11 +45,13 @@ All modes separate facts, assumptions, missing information, risks, and planner n
 
 Each Maximo-style tab shows:
 
-- `Generated output`: the original agent-generated baseline
-- `Planner edited version`: the editable planner copy
-- `Changes before copy/paste`: added, removed, and changed line summary
+- `Agent generated baseline`: the original content the assistant provided
+- `Planner final text for copy/paste`: the content the planner intends to use
+- `What changed for agent refinement`: kept, removed, added, and edited line summary
 
-Use `Save progress` to keep the generated baseline and planner edits in the current browser's local storage. The input screen shows `Resume saved progress` when a saved review session exists.
+Use `Save progress` to keep the generated baseline and planner final text in the current browser's local storage. The input screen shows `Resume saved progress` when a saved review session exists.
+
+Use `Export refinement JSON` or `Export refinement Markdown` to preserve what the assistant provided versus what the planner actually kept for copy/paste. This is the local MVP refinement signal for improving the agent over time.
 
 ## Maximo-Style Tabs
 

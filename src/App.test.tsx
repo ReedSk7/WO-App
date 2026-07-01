@@ -39,6 +39,8 @@ describe('planner MVP app shell', () => {
     expect(screen.getByText('CR record: DEMO-CR-1001')).toBeInTheDocument();
     expect(screen.getAllByText('Create Work Order Draft').length).toBeGreaterThan(0);
     expect(screen.getByText('Planning assistant guidance')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement Markdown' })).toBeInTheDocument();
     expect(
       screen.getAllByText('Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.').length,
     ).toBeGreaterThan(0);
@@ -73,7 +75,7 @@ describe('planner MVP app shell', () => {
     expect(screen.getByText('No live system access, work authorization, or operability decision is represented.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Plans' }));
-    expect((screen.getByLabelText('Planner edited version for Plans') as HTMLTextAreaElement).value).toContain(
+    expect((screen.getByLabelText('Planner final text for copy/paste for Plans') as HTMLTextAreaElement).value).toContain(
       '- Treat history as context, not authority.',
     );
   });
@@ -91,7 +93,7 @@ describe('planner MVP app shell', () => {
     expect(screen.getAllByText('Needs planner confirmation').length).toBeGreaterThan(0);
   });
 
-  it('shows generated output beside planner edits and summarizes changes before copy', async () => {
+  it('shows agent baseline beside planner final text and summarizes refinement changes', async () => {
     render(<App />);
 
     fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
@@ -99,16 +101,17 @@ describe('planner MVP app shell', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
-    const editBox = (await screen.findByLabelText('Planner edited version for Workorder')) as HTMLTextAreaElement;
-    expect(screen.getByText('Generated output')).toBeInTheDocument();
-    expect(screen.getByText('No planner edits on this tab yet.')).toBeInTheDocument();
+    const editBox = (await screen.findByLabelText('Planner final text for copy/paste for Workorder')) as HTMLTextAreaElement;
+    expect(screen.getByText('Agent generated baseline')).toBeInTheDocument();
+    expect(screen.getByText('What changed for agent refinement')).toBeInTheDocument();
+    expect(screen.getByText('All 11 agent-generated lines are currently kept for copy/paste.')).toBeInTheDocument();
 
     fireEvent.change(editBox, {
       target: { value: `${editBox.value}\nPlanner edit: confirm the approved source document before copy/paste.` },
     });
 
     expect(screen.getAllByText('Changed tabs: 1').length).toBeGreaterThan(0);
-    expect(screen.getByText('Added: 1 | Removed: 0 | Changed: 0')).toBeInTheDocument();
+    expect(screen.getByText('Kept: 11 | Removed: 0 | Added: 1 | Edited: 0')).toBeInTheDocument();
     expect(screen.getByText('Line 12 added: Planner edit: confirm the approved source document before copy/paste.')).toBeInTheDocument();
   });
 
@@ -120,7 +123,7 @@ describe('planner MVP app shell', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
 
-    const editBox = (await screen.findByLabelText('Planner edited version for Workorder')) as HTMLTextAreaElement;
+    const editBox = (await screen.findByLabelText('Planner final text for copy/paste for Workorder')) as HTMLTextAreaElement;
     fireEvent.change(editBox, {
       target: { value: `${editBox.value}\nPlanner edit: preserve as-found notes for later review.` },
     });
@@ -134,7 +137,7 @@ describe('planner MVP app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resume saved progress' }));
 
     expect(await screen.findByRole('heading', { name: 'Demo valve actuator slow stroke draft review' })).toBeInTheDocument();
-    expect((screen.getByLabelText('Planner edited version for Workorder') as HTMLTextAreaElement).value).toContain(
+    expect((screen.getByLabelText('Planner final text for copy/paste for Workorder') as HTMLTextAreaElement).value).toContain(
       'Planner edit: preserve as-found notes for later review.',
     );
   });

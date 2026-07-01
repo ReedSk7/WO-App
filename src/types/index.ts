@@ -184,3 +184,43 @@ export interface PlannerReviewSession {
   createdAt: string;
   updatedAt: string;
 }
+
+export type RefinementLineChangeType = 'kept' | 'added' | 'removed' | 'edited';
+
+export interface RefinementLineChange {
+  type: RefinementLineChangeType;
+  lineNumber: number;
+  agentGenerated?: string;
+  plannerFinal?: string;
+}
+
+export interface RefinementTabSummary {
+  tabId: MaximoTabId;
+  tabLabel: string;
+  agentGeneratedBaseline: string;
+  plannerFinalText: string;
+  kept: number;
+  added: number;
+  removed: number;
+  edited: number;
+  changes: RefinementLineChange[];
+}
+
+export interface PlannerRefinementReport {
+  sessionId: string;
+  input: string;
+  mode: PlannerResponseMode;
+  modeLabel: string;
+  recordNumber: string;
+  title: string;
+  generatedAt: string;
+  exportedAt: string;
+  changedTabs: number;
+  totals: {
+    kept: number;
+    added: number;
+    removed: number;
+    edited: number;
+  };
+  tabs: RefinementTabSummary[];
+}
