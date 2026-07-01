@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This app is a static Vite site. It has no backend, no authentication, no external API calls, and stores drafts only in the current browser's localStorage.
+This app is a static Vite site. It has no backend, no authentication, no external API calls, and does not save generated work packages to a backend.
 
 Do not enter proprietary, confidential, export-controlled, plant-sensitive, or real equipment data.
 
@@ -62,11 +62,7 @@ Use GitHub Pages if you want hosting directly from the repo.
 https://reedsk7.github.io/WO-App/
 ```
 
-GitHub Pages uses a `/WO-App/` asset base and hash routing for client routes, so app links look like:
-
-```text
-https://reedsk7.github.io/WO-App/#/intake
-```
+GitHub Pages uses a `/WO-App/` asset base. The MVP opens from the root app URL.
 
 ## Optional Option: Vercel
 
@@ -106,7 +102,7 @@ Use Vercel if you prefer its dashboard or already have a Vercel account.
 
 - Netlify: confirm `netlify.toml` is committed and detected.
 - Vercel: confirm `vercel.json` is committed and detected.
-- GitHub Pages: use hash route URLs such as `https://reedsk7.github.io/WO-App/#/draft`.
+- GitHub Pages: use the root app URL `https://reedsk7.github.io/WO-App/`.
 
 ### Assets Not Loading
 
@@ -120,9 +116,8 @@ Use Vercel if you prefer its dashboard or already have a Vercel account.
 - If the work browser blocks Netlify, try GitHub Pages or Vercel.
 - If all public hosting is blocked, ask IT which static hosting domains are allowed.
 
-### localStorage Drafts Are Missing On Work Computer
+### Generated Packages Are Missing On Work Computer
 
 - This is expected.
-- Drafts are stored in browser localStorage.
-- localStorage is not synced between home and work computers.
-- Export Markdown or JSON from the original browser if you need to carry a draft manually.
+- Generated packages are created in the current browser session.
+- Re-enter the fake CR/MPL/WO number or demo condition note on the work computer.

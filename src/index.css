@@ -72,6 +72,24 @@ html[data-density='compact'] {
   }
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-fade-in {
+    animation: fade-in 220ms ease-out both;
+  }
+}
+
 @media print {
   .no-print,
   aside,

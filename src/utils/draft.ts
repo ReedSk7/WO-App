@@ -165,7 +165,7 @@ export function makeDraft(input: CRIntake, templates: TemplateSettings): WorkOrd
         `Work Type: ${input.workType}`,
         `Priority: ${input.priority}`,
         '',
-        'Draft for planner review only.',
+        'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.',
       ].join('\n'),
     ),
     section('problem', 'Problem Statement', line(input.problemStatement, '[Add a clear problem statement from the demo CR.]')),
@@ -203,8 +203,8 @@ export function makeDraft(input: CRIntake, templates: TemplateSettings): WorkOrd
       'clearance',
       'Clearance / Tagging Considerations',
       input.requiresClearance
-        ? `${templates.clearanceNote}\nClearance boundary is not defined in this demo draft and must be established from approved work scope and site procedure requirements.`
-        : 'No clearance requested in intake. Verify applicability during planner review.',
+        ? `${templates.clearanceNote}\nClearance boundary is not defined in this demo draft and must be established from approved work scope and approved instructions.`
+        : `${templates.clearanceNote}\nNo clearance requested in intake. Verify applicability during planner review.`,
     ),
     section('tools', 'Tools and Test Equipment', '[Tool list placeholder: planner to define verified tools, calibrated test equipment, and any access equipment.]'),
     section(
@@ -217,12 +217,12 @@ export function makeDraft(input: CRIntake, templates: TemplateSettings): WorkOrd
     section('labor', 'Labor / Craft Estimate', `[Labor estimate placeholder: planner to validate by craft/task. Primary discipline: ${input.discipline}.`),
     section(
       'instructions',
-      'Step-by-Step Work Instructions',
+      'High-Level Planning Outline',
       [
-        '1. Validate CR scope, asset, location, and work boundaries.',
-        '2. Confirm prerequisites, clearances, access needs, and required reviews.',
-        '3. Insert approved procedure references and verified technical data.',
-        '4. Execute only after qualified planner review and approved work direction.',
+        '1. Confirm source record, asset, location, and work scope with qualified planner review.',
+        '2. Identify prerequisites, clearance review needs, access needs, and required reviews.',
+        '3. Attach approved procedure references and verified technical data.',
+        '4. Hold for qualified planner review and applicable approvals before any execution use.',
       ].join('\n'),
     ),
     section('acceptance', 'Acceptance Criteria Placeholder', templates.acceptanceCriteriaPlaceholder),

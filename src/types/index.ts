@@ -97,3 +97,49 @@ export interface SampleCR {
   summary: string;
   intake: CRIntake;
 }
+
+export type PlannerRecordType = 'CR' | 'MPL' | 'WO' | 'Unknown';
+export type PlannerMatchType = 'sample' | 'generic';
+
+export type MaximoTabId =
+  | 'workorder'
+  | 'plans'
+  | 'reviews'
+  | 'engineering'
+  | 'scheduling'
+  | 'logic'
+  | 'related-records'
+  | 'actuals'
+  | 'safety-plan'
+  | 'impact-plans'
+  | 'log'
+  | 'specifications';
+
+export interface MaximoTabDefinition {
+  id: MaximoTabId;
+  label: string;
+}
+
+export interface PlannerTabContent extends MaximoTabDefinition {
+  lines: string[];
+}
+
+export interface PlannerPackage {
+  input: string;
+  normalizedInput: string;
+  matchType: PlannerMatchType;
+  recordType: PlannerRecordType;
+  recordNumber: string;
+  title: string;
+  asset: string;
+  location: string;
+  priority: string;
+  workType: string;
+  discipline: string;
+  status: string;
+  confidence: number;
+  generatedAt: string;
+  knownFacts: string[];
+  informationGaps: string[];
+  tabs: PlannerTabContent[];
+}

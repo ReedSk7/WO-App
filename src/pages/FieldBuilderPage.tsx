@@ -24,7 +24,7 @@ function buildOutputs(values: {
   const action = values.requestedAction || '[requested action required]';
   return {
     'Long Description': [
-      'Draft for planner review only.',
+      'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.',
       `Asset: ${asset}`,
       `Problem: ${problem}`,
       `Requested action: ${action}`,
@@ -37,9 +37,9 @@ function buildOutputs(values: {
       : 'No parts selected in this field build. Planner to verify material need.',
     'Tool Notes': 'Tool and test equipment list is a placeholder. Planner to add verified tools and calibrated test equipment requirements.',
     'Clearance Notes': values.clearanceRequired
-      ? 'Clearance required. Boundary must match approved work scope and site procedure requirements. Boundary is not defined in this demo draft.'
-      : 'No clearance selected. Planner to verify whether clearance/LOTO is required.',
-    'PMT Notes': 'PMT placeholder only. Verified post-maintenance testing requirements must be added by qualified review.',
+      ? 'This is not a clearance boundary. Potential isolation points are listed for review only. Qualified operations/electrical review required. Clearance scope must align with final approved work instructions. This app does not create or approve clearance boundaries.'
+      : 'This is not a clearance boundary. Potential isolation points are listed for review only. Qualified operations/electrical review required. Clearance scope must align with final approved work instructions. This app does not create or approve clearance boundaries. No clearance selected; planner to verify whether clearance review is required.',
+    'PMT Notes': 'Use approved procedure, engineering direction, or qualified test guidance. This demo does not define acceptance criteria.',
     'Reviewer Notes': 'Reviewer must confirm missing information, ORA/risk review need, source documents, and closeout expectations before use.',
   };
 }

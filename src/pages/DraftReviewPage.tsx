@@ -89,7 +89,7 @@ export default function DraftReviewPage() {
         <MetaItem label="Checklist" value={`${normalizedDraft.checklistPercent}%`} />
       </dl>
       <p className="text-sm font-semibold text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-        Draft for planner review only. Not approved work direction.
+        Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.
       </p>
     </div>
   );

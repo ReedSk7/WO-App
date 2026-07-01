@@ -13,7 +13,7 @@ export function formatDraftMarkdown(draft: WorkOrderDraft) {
   const metadata = [
     `# ${draft.title}`,
     '',
-    'Draft for planner review only.',
+    'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.',
     '',
     `- CR: ${draft.crIntake.crNumber || '[missing]'}`,
     `- Asset: ${draft.crIntake.assetNumber || '[missing]'}`,
