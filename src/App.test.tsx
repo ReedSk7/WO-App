@@ -11,6 +11,10 @@ describe('planner MVP app shell', () => {
     render(<App />);
 
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Create Work Order Draft/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Review Work Order/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Research \/ Planning Basis/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /General Guidance/i })).toBeInTheDocument();
     expect(screen.getByLabelText('paste or type CR/MPL/Work order number')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Analyze' })).toBeInTheDocument();
     expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
@@ -28,6 +32,8 @@ describe('planner MVP app shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Demo pump seal leakage planning review' })).toBeInTheDocument();
     expect(screen.getByText('CR record: DEMO-CR-1001')).toBeInTheDocument();
+    expect(screen.getAllByText('Create Work Order Draft').length).toBeGreaterThan(0);
+    expect(screen.getByText('Planning assistant guidance')).toBeInTheDocument();
     expect(
       screen.getAllByText('Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.').length,
     ).toBeGreaterThan(0);
@@ -46,6 +52,23 @@ describe('planner MVP app shell', () => {
       'Log',
       'Specifications',
     ]);
+  });
+
+  it('uses the selected response mode in the generated result', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Research \/ Planning Basis/i }));
+    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
+      target: { value: 'DEMO-MPL-2001' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+
+    expect(await screen.findByRole('heading', { name: 'Demo breaker inspection planning list item' })).toBeInTheDocument();
+    expect(screen.getAllByText('Research / Planning Basis').length).toBeGreaterThan(0);
+    expect(screen.getByText('No live system access, work authorization, or operability decision is represented.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Plans' }));
+    expect(screen.getByText('- Treat history as context, not authority.')).toBeInTheDocument();
   });
 
   it('uses a conservative generic package when no fake sample matches', async () => {

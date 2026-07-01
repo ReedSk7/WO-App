@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
+import { DEFAULT_RESPONSE_MODE, PLANNER_RESPONSE_MODES } from './data/agentGuidance';
 import { MAXIMO_TABS } from './data/plannerSamples';
 import { useTheme } from './hooks/useTheme';
-import type { MaximoTabId, PlannerPackage, PlannerTabContent } from './types';
+import type { MaximoTabId, PlannerPackage, PlannerResponseMode, PlannerTabContent } from './types';
 import { PLANNER_DISCLAIMER, createPlannerPackage } from './utils/plannerPackage';
 
 type ScreenState = 'input' | 'result';
@@ -29,6 +30,40 @@ function ReviewList({ title, items }: { title: string; items: string[] }) {
           </li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+function ModeSelector({
+  selectedMode,
+  onModeChange,
+}: {
+  selectedMode: PlannerResponseMode;
+  onModeChange: (mode: PlannerResponseMode) => void;
+}) {
+  return (
+    <section aria-label="Response mode" className="rounded-md border border-border-subtle bg-surface-raisedLight p-2 dark:bg-surface-raisedDark">
+      <div className="grid gap-2 sm:grid-cols-2">
+        {PLANNER_RESPONSE_MODES.map((mode) => {
+          const selected = mode.id === selectedMode;
+          return (
+            <button
+              aria-pressed={selected}
+              className={`rounded-md border px-3 py-3 text-left transition ${
+                selected
+                  ? 'border-brand-500 bg-surface-light text-texttone-primaryLight shadow-sm dark:border-brand-400 dark:bg-surface-dark dark:text-texttone-primaryDark'
+                  : 'border-transparent text-texttone-secondaryLight hover:bg-surface-light hover:text-texttone-primaryLight dark:text-texttone-secondaryDark dark:hover:bg-surface-dark dark:hover:text-texttone-primaryDark'
+              }`}
+              key={mode.id}
+              onClick={() => onModeChange(mode.id)}
+              type="button"
+            >
+              <span className="block text-sm font-semibold">{mode.label}</span>
+              <span className="mt-1 block text-xs leading-5">{mode.summary}</span>
+            </button>
+          );
+        })}
+      </div>
     </section>
   );
 }
@@ -99,12 +134,16 @@ function TabPanel({ tab }: { tab: PlannerTabContent }) {
 function InputScreen({
   input,
   error,
+  selectedMode,
   onInputChange,
+  onModeChange,
   onAnalyze,
 }: {
   input: string;
   error: string;
+  selectedMode: PlannerResponseMode;
   onInputChange: (value: string) => void;
+  onModeChange: (mode: PlannerResponseMode) => void;
   onAnalyze: () => void;
 }) {
   return (
@@ -122,7 +161,9 @@ function InputScreen({
         </div>
 
         <div className="pt-6">
-          <label className="label" htmlFor="planner-input">
+          <ModeSelector onModeChange={onModeChange} selectedMode={selectedMode} />
+
+          <label className="label mt-5 block" htmlFor="planner-input">
             paste or type CR/MPL/Work order number
           </label>
           <textarea
@@ -155,6 +196,42 @@ function InputScreen({
         </div>
       </section>
     </main>
+  );
+}
+
+function AssistantGuidancePanel({ plannerPackage }: { plannerPackage: PlannerPackage }) {
+  return (
+    <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Planning assistant guidance">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+        <div>
+          <p className="label">Planning assistant guidance</p>
+          <h2 className="mt-2 text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
+            {plannerPackage.modeLabel}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">{plannerPackage.modeSummary}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Source grounding</p>
+            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
+              Use the highest applicable approved source class and state conflicts plainly.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Limits</p>
+            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
+              No live system access, work authorization, or operability decision is represented.
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Output discipline</p>
+            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
+              Separate facts, assumptions, missing information, risks, and planner next actions.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -197,15 +274,20 @@ function ResultScreen({
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Planner package summary">
+          <SummaryTile label="Mode" value={plannerPackage.modeLabel} />
           <SummaryTile label="Match" value={plannerPackage.status} />
           <SummaryTile label="Confidence" value={`${plannerPackage.confidence}/100`} />
           <SummaryTile label="Asset" value={plannerPackage.asset} />
-          <SummaryTile label="Priority" value={plannerPackage.priority} />
         </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <AssistantGuidancePanel plannerPackage={plannerPackage} />
+
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <ReviewList items={plannerPackage.knownFacts} title="Known Conditions" />
+          <ReviewList items={plannerPackage.assumptions} title="Assumptions" />
           <ReviewList items={plannerPackage.informationGaps} title="Information Gaps" />
+          <ReviewList items={plannerPackage.risks} title="Risks" />
+          <ReviewList items={plannerPackage.plannerNextActions} title="Planner Next Actions" />
         </div>
 
         <section aria-label="Maximo-style planning details" className="min-w-0">
@@ -231,6 +313,7 @@ export default function App() {
   const [screen, setScreen] = useState<ScreenState>('input');
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [selectedMode, setSelectedMode] = useState<PlannerResponseMode>(DEFAULT_RESPONSE_MODE);
   const [activeTabId, setActiveTabId] = useState<MaximoTabId>('workorder');
   const [plannerPackage, setPlannerPackage] = useState<PlannerPackage | null>(null);
 
@@ -241,7 +324,7 @@ export default function App() {
     }
 
     setError('');
-    setPlannerPackage(createPlannerPackage(input));
+    setPlannerPackage(createPlannerPackage(input, new Date(), selectedMode));
     setActiveTabId('workorder');
     setScreen('result');
   }
@@ -269,7 +352,14 @@ export default function App() {
           plannerPackage={plannerPackage}
         />
       ) : (
-        <InputScreen error={error} input={input} onAnalyze={analyzeInput} onInputChange={setInput} />
+        <InputScreen
+          error={error}
+          input={input}
+          onAnalyze={analyzeInput}
+          onInputChange={setInput}
+          onModeChange={setSelectedMode}
+          selectedMode={selectedMode}
+        />
       )}
     </div>
   );

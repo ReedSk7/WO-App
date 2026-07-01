@@ -5,6 +5,7 @@ Static demo web app for helping nuclear work order planners turn fake CR/MPL/WO 
 The app is intentionally simple:
 
 - One input box labeled `paste or type CR/MPL/Work order number`
+- One response-mode selector for draft creation, draft review, planning-basis research, or general guidance
 - One `Analyze` action
 - One result screen with Maximo-style top tabs
 - Fake/demo sample data only
@@ -25,6 +26,17 @@ DEMO-WO-3001
 
 Unknown input creates a conservative generic planner package with missing information clearly flagged.
 
+## Response Modes
+
+The mode selector changes the planner guidance in the generated package while keeping the MVP workflow simple:
+
+- `Create Work Order Draft`: constrained draft package structure and next actions
+- `Review Work Order`: completeness, risk, task-structure, and edit guidance
+- `Research / Planning Basis`: known context, possible indicators, and limits of history use
+- `General Guidance`: concise planning-process guidance with source and uncertainty limits
+
+All modes separate facts, assumptions, missing information, risks, and planner next actions.
+
 ## Maximo-Style Tabs
 
 The result screen keeps these tabs in order:
@@ -43,6 +55,17 @@ The result screen keeps these tabs in order:
 - Specifications
 
 Technical values, setpoints, torque values, PMT values, acceptance criteria, clearance boundaries, and procedure steps are not generated. The app points the planner back to approved source documents and qualified review.
+
+## Planning Assistant Guidance
+
+The app models a public-safe planning assistant. It can represent these planner-support behaviors using fake/demo data:
+
+- Research fake equipment and work-history context
+- Summarize planning-basis questions and repeat-condition indicators
+- Draft conservative planning content for qualified planner review
+- Review draft packages for completeness, source gaps, and field usability
+
+It does not represent live system access, work authorization, operability decisions, or approval authority.
 
 ## Setup
 

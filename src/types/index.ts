@@ -100,6 +100,11 @@ export interface SampleCR {
 
 export type PlannerRecordType = 'CR' | 'MPL' | 'WO' | 'Unknown';
 export type PlannerMatchType = 'sample' | 'generic';
+export type PlannerResponseMode =
+  | 'create-work-order-draft'
+  | 'review-work-order'
+  | 'research-planning-basis'
+  | 'general-guidance';
 
 export type MaximoTabId =
   | 'workorder'
@@ -124,10 +129,29 @@ export interface PlannerTabContent extends MaximoTabDefinition {
   lines: string[];
 }
 
+export interface PlannerModeDefinition {
+  id: PlannerResponseMode;
+  label: string;
+  summary: string;
+  outputSections: string[];
+  focus: string[];
+}
+
+export interface PlannerAssistantGuidance {
+  capabilities: string[];
+  operatingPriorities: string[];
+  sourcePrecedence: string[];
+  outputDiscipline: string[];
+  limitations: string[];
+}
+
 export interface PlannerPackage {
   input: string;
   normalizedInput: string;
   matchType: PlannerMatchType;
+  mode: PlannerResponseMode;
+  modeLabel: string;
+  modeSummary: string;
   recordType: PlannerRecordType;
   recordNumber: string;
   title: string;
@@ -140,6 +164,12 @@ export interface PlannerPackage {
   confidence: number;
   generatedAt: string;
   knownFacts: string[];
+  assumptions: string[];
   informationGaps: string[];
+  risks: string[];
+  plannerNextActions: string[];
+  modeOutputSections: string[];
+  modeFocus: string[];
+  assistantGuidance: PlannerAssistantGuidance;
   tabs: PlannerTabContent[];
 }

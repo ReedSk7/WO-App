@@ -1,5 +1,6 @@
+import { ASSISTANT_GUIDANCE, DEFAULT_RESPONSE_MODE, getPlannerModeDefinition } from '../data/agentGuidance';
 import { MAXIMO_TABS, plannerSamples, type PlannerSample } from '../data/plannerSamples';
-import type { MaximoTabId, PlannerPackage, PlannerRecordType, PlannerTabContent } from '../types';
+import type { MaximoTabId, PlannerPackage, PlannerRecordType, PlannerResponseMode, PlannerTabContent } from '../types';
 
 export const PLANNER_DISCLAIMER =
   'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.';
@@ -21,6 +22,44 @@ function findSample(normalizedInput: string) {
 
 function lineGroup(title: string, lines: string[]) {
   return [`${title}:`, ...lines.map((line) => `- ${line}`)];
+}
+
+function assumptionsFor(sample: PlannerSample) {
+  return [
+    `Planning basis is limited to the fake source summary for ${sample.recordNumber}.`,
+    'Approved procedure, form, and organization-specific requirements are not available in this demo.',
+    'Planner review is required before any scope, support, material, or testing decision is accepted.',
+  ];
+}
+
+function risksFor(sample: PlannerSample) {
+  return [
+    `Incomplete source data may understate work scope for ${sample.asset}.`,
+    'History and examples may suggest patterns but cannot define requirements.',
+    'Unverified clearance, PMT, or acceptance criteria could create execution-quality risk.',
+  ];
+}
+
+function nextActionsFor() {
+  return [
+    'Confirm the governing approved source documents for the requested work.',
+    'Perform planner walkdown or document review if asset, location, condition, or boundaries are unclear.',
+    'Resolve missing information before moving the package beyond draft review.',
+  ];
+}
+
+function modeOutcomeLine(mode: PlannerResponseMode) {
+  switch (mode) {
+    case 'review-work-order':
+      return 'Mode outcome: review draft quality, identify gaps, and recommend planner edits without approving the work package.';
+    case 'research-planning-basis':
+      return 'Mode outcome: summarize known context, possible indicators, limits of history use, and research questions.';
+    case 'general-guidance':
+      return 'Mode outcome: provide practical planning guidance with limits, source expectations, and minimum next action.';
+    case 'create-work-order-draft':
+    default:
+      return 'Mode outcome: create a constrained draft planning package for qualified planner review.';
+  }
 }
 
 function genericSample(normalizedInput: string): PlannerSample {
@@ -52,11 +91,23 @@ function genericSample(normalizedInput: string): PlannerSample {
   };
 }
 
-function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number, generatedAt: string): string[] {
+function tabLines(
+  tabId: MaximoTabId,
+  sample: PlannerSample,
+  confidence: number,
+  generatedAt: string,
+  mode: ReturnType<typeof getPlannerModeDefinition>,
+): string[] {
+  const assumptions = assumptionsFor(sample);
+  const risks = risksFor(sample);
+  const nextActions = nextActionsFor();
+
   switch (tabId) {
     case 'workorder':
       return [
         PLANNER_DISCLAIMER,
+        `Response mode: ${mode.label}`,
+        mode.summary,
         `Record: ${sample.recordNumber}`,
         `Title: ${sample.title}`,
         `Asset: ${sample.asset}`,
@@ -68,12 +119,15 @@ function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number,
       ];
     case 'plans':
       return [
+        modeOutcomeLine(mode.id),
         'Job plan: select or create only after qualified review.',
-        'Task numbering awareness: 0-9 clearance and release prerequisites, 10-14 scope and precautions, 15+ high-level work, PMT, and support tasks.',
+        'Task structure standard: tasks 0-9 clearance revisions, task 10 scope, tasks 11-14 prerequisites and precautions, tasks 15-19 support tasks, tasks 20+ high-level work instructions.',
         'Labor: planner to confirm craft and support needs.',
         'Materials: identify by category only until approved parts data is available.',
         'Tools and test equipment: placeholder pending approved source documents.',
         'Use approved procedure, engineering direction, or qualified test guidance. This demo does not define acceptance criteria.',
+        ...lineGroup('Mode output sections', mode.outputSections),
+        ...lineGroup('Mode focus', mode.focus),
       ];
     case 'reviews':
       return [
@@ -83,6 +137,8 @@ function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number,
         'Fire protection screening: required for every generated demo WO package.',
         'Task-level ORA: required for non-administrative work.',
         'QC, Environmental, Cyber, and Engineering: screen by applicability.',
+        ...lineGroup('Source precedence', ASSISTANT_GUIDANCE.sourcePrecedence),
+        'If sources conflict, state the conflict and use the highest governing source class without blending lower-class context into a requirement.',
       ];
     case 'engineering':
       return [
@@ -107,13 +163,17 @@ function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number,
         `Planner confidence: ${confidence}/100.`,
         sample.sourceSummary,
         ...lineGroup('Known conditions', sample.knownFacts),
+        ...lineGroup('Assumptions', assumptions),
         ...lineGroup('Information gaps', sample.informationGaps),
+        ...lineGroup('Risks', risks),
+        ...lineGroup('Planner next actions', nextActions),
       ];
     case 'related-records':
       return [
         `Source record: ${sample.recordNumber}`,
         ...lineGroup('Related fake records for planner research', sample.relatedRecords),
-        'Related records are research prompts only and do not expand the authorized scope.',
+        'Maintenance history and related records are research prompts only and do not expand the authorized scope.',
+        'History use: suggest patterns only; do not use history as authority for work steps, PMT scope, acceptance criteria, limits, or operability conclusions.',
       ];
     case 'actuals':
       return [
@@ -138,7 +198,8 @@ function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number,
       return [
         `Generated: ${generatedAt}`,
         `Input captured: ${sample.recordNumber}`,
-        'Generation method: deterministic fake-data lookup with conservative generic fallback.',
+        `Response mode captured: ${mode.label}`,
+        'Generation method: deterministic fake-data lookup with conservative generic fallback and public-safe planner guidance.',
         PLANNER_DISCLAIMER,
       ];
     case 'specifications':
@@ -152,21 +213,32 @@ function tabLines(tabId: MaximoTabId, sample: PlannerSample, confidence: number,
   }
 }
 
-export function createPlannerPackage(rawInput: string, now: Date = new Date()): PlannerPackage {
+export function createPlannerPackage(
+  rawInput: string,
+  now: Date = new Date(),
+  modeId: PlannerResponseMode = DEFAULT_RESPONSE_MODE,
+): PlannerPackage {
   const normalizedInput = normalizePlannerInput(rawInput);
   const sample = findSample(normalizedInput) ?? genericSample(normalizedInput);
   const isSample = sample.aliases.length > 0;
   const generatedAt = now.toISOString();
   const confidence = isSample ? 72 : 34;
+  const mode = getPlannerModeDefinition(modeId);
+  const assumptions = assumptionsFor(sample);
+  const risks = risksFor(sample);
+  const plannerNextActions = nextActionsFor();
   const tabs: PlannerTabContent[] = MAXIMO_TABS.map((tab) => ({
     ...tab,
-    lines: tabLines(tab.id, sample, confidence, generatedAt),
+    lines: tabLines(tab.id, sample, confidence, generatedAt, mode),
   }));
 
   return {
     input: rawInput,
     normalizedInput,
     matchType: isSample ? 'sample' : 'generic',
+    mode: mode.id,
+    modeLabel: mode.label,
+    modeSummary: mode.summary,
     recordType: sample.recordType,
     recordNumber: sample.recordNumber,
     title: sample.title,
@@ -179,7 +251,13 @@ export function createPlannerPackage(rawInput: string, now: Date = new Date()): 
     confidence,
     generatedAt,
     knownFacts: sample.knownFacts,
+    assumptions,
     informationGaps: sample.informationGaps,
+    risks,
+    plannerNextActions,
+    modeOutputSections: mode.outputSections,
+    modeFocus: mode.focus,
+    assistantGuidance: ASSISTANT_GUIDANCE,
     tabs,
   };
 }
