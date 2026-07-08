@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PLANNER_RESPONSE_MODES } from '../data/agentGuidance';
 import { MAXIMO_TABS } from '../data/plannerSamples';
+import { PLANNER_SITES } from '../data/plannerSites';
 import { createPlannerPackage, PLANNER_DISCLAIMER } from './plannerPackage';
 
 const fixedNow = new Date('2026-07-01T12:00:00.000Z');
 const forbiddenPublicTerms = [
-  ['Ha', 'tch'].join(''),
-  ['Plant', ' ', 'Ha', 'tch'].join(''),
   ['Data', 'bricks'].join(''),
   ['Genie', ' ', 'Space'].join(''),
   ['wo', '_plan', '_assistant'].join(''),
@@ -16,12 +15,14 @@ const forbiddenPublicTerms = [
 
 describe('planner package generation', () => {
   it('matches canned fake records and preserves the Maximo tab order', () => {
-    const plannerPackage = createPlannerPackage('please analyze DEMO-MPL-2001', fixedNow);
+    const plannerPackage = createPlannerPackage('please analyze DEMO-MPL-2001', fixedNow, undefined, PLANNER_SITES[1]);
 
+    expect(plannerPackage.siteLabel).toBe('Vogtle 1 and 2');
     expect(plannerPackage.matchType).toBe('sample');
     expect(plannerPackage.modeLabel).toBe('Create Work Order Draft');
     expect(plannerPackage.recordType).toBe('MPL');
     expect(plannerPackage.recordNumber).toBe('DEMO-MPL-2001');
+    expect(plannerPackage.relatedRecords[0]).toMatchObject({ recordNumber: 'DEMO-CR-1018', tabId: 'related-records' });
     expect(plannerPackage.tabs.map((tab) => tab.label)).toEqual(MAXIMO_TABS.map((tab) => tab.label));
     expect(plannerPackage.tabs[0].lines).toContain(PLANNER_DISCLAIMER);
   });
@@ -86,8 +87,8 @@ describe('planner package generation', () => {
     expect(outputText).toContain('Planner next actions:');
   });
 
-  it('does not expose internal system, site, or tool names in generated packages', () => {
-    const corpus = PLANNER_RESPONSE_MODES.map((mode) => createPlannerPackage('DEMO-WO-3001', fixedNow, mode.id))
+  it('does not expose internal system or tool names in generated packages', () => {
+    const corpus = PLANNER_RESPONSE_MODES.map((mode) => createPlannerPackage('DEMO-WO-3001', fixedNow, mode.id, PLANNER_SITES[0]))
       .map((plannerPackage) => JSON.stringify(plannerPackage))
       .join('\n');
 

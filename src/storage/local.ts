@@ -4,11 +4,14 @@ import type {
   DensityPreference,
   MaximoTabId,
   MissingInfoItem,
+  PlannerPackage,
+  PlannerRefinementLogEntry,
   PlannerReviewSession,
   TemplateSettings,
   ThemePreference,
   WorkOrderDraft,
 } from '../types';
+import { UNKNOWN_PLANNER_SITE } from '../data/plannerSites';
 import { defaultTemplates } from '../templates/defaults';
 import { createDefaultChecklist } from '../utils/checklist';
 import { detectMissingInfo } from '../utils/draft';
@@ -24,7 +27,10 @@ export const STORAGE_KEYS = {
   density: 'woac:v1:ui-density',
   plannerReviewSessions: 'woac:v1:planner-review-sessions',
   currentPlannerReviewSessionId: 'woac:v1:current-planner-review-session-id',
+  plannerRefinementLogs: 'woac:v1:planner-refinement-logs',
 } as const;
+
+const REFINEMENT_LOG_LIMIT = 50;
 
 function canUseStorage() {
   return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -116,20 +122,31 @@ export const saveChecklistForDraft = (draftId: string, checklist: ChecklistItem[
 
 export const loadChecklistForDraft = (draftId: string) => loadChecklistMap()[draftId] ?? createDefaultChecklist();
 
+function normalizePlannerPackage(plannerPackage: PlannerPackage): PlannerPackage {
+  return {
+    ...plannerPackage,
+    siteId: plannerPackage.siteId ?? UNKNOWN_PLANNER_SITE.id,
+    siteLabel: plannerPackage.siteLabel ?? UNKNOWN_PLANNER_SITE.label,
+    relatedRecords: Array.isArray(plannerPackage.relatedRecords) ? plannerPackage.relatedRecords : [],
+  };
+}
+
 function generatedTabText(session: PlannerReviewSession, tabId: MaximoTabId) {
-  return session.plannerPackage.tabs.find((tab) => tab.id === tabId)?.lines.join('\n') ?? '';
+  return normalizePlannerPackage(session.plannerPackage).tabs.find((tab) => tab.id === tabId)?.lines.join('\n') ?? '';
 }
 
 function normalizePlannerReviewSession(session: PlannerReviewSession): PlannerReviewSession {
-  const tabEdits = session.plannerPackage.tabs.reduce<PlannerReviewSession['tabEdits']>((current, tab) => {
+  const plannerPackage = normalizePlannerPackage(session.plannerPackage);
+  const tabEdits = plannerPackage.tabs.reduce<PlannerReviewSession['tabEdits']>((current, tab) => {
     current[tab.id] = typeof session.tabEdits?.[tab.id] === 'string' ? session.tabEdits[tab.id] : generatedTabText(session, tab.id);
     return current;
   }, {});
 
   return {
     ...session,
+    plannerPackage,
     tabEdits,
-    activeTabId: session.activeTabId ?? session.plannerPackage.tabs[0]?.id ?? 'workorder',
+    activeTabId: session.activeTabId ?? plannerPackage.tabs[0]?.id ?? 'workorder',
   };
 }
 
@@ -158,4 +175,31 @@ export const upsertPlannerReviewSession = (session: PlannerReviewSession) => {
   savePlannerReviewSessions(sessions);
   saveCurrentPlannerReviewSessionId(normalized.id);
   return normalized;
+};
+
+function normalizePlannerRefinementLogEntry(entry: PlannerRefinementLogEntry): PlannerRefinementLogEntry {
+  const siteId = entry.siteId ?? entry.report?.siteId ?? UNKNOWN_PLANNER_SITE.id;
+  const siteLabel = entry.siteLabel ?? entry.report?.siteLabel ?? UNKNOWN_PLANNER_SITE.label;
+  return {
+    ...entry,
+    siteId,
+    siteLabel,
+    report: {
+      ...entry.report,
+      siteId,
+      siteLabel,
+    },
+  };
+}
+
+export const loadPlannerRefinementLogs = (): PlannerRefinementLogEntry[] =>
+  readJson<PlannerRefinementLogEntry[]>(STORAGE_KEYS.plannerRefinementLogs, []).map(normalizePlannerRefinementLogEntry);
+
+export const savePlannerRefinementLogs = (entries: PlannerRefinementLogEntry[]) =>
+  writeJson(STORAGE_KEYS.plannerRefinementLogs, entries.map(normalizePlannerRefinementLogEntry).slice(0, REFINEMENT_LOG_LIMIT));
+
+export const appendPlannerRefinementLog = (entry: PlannerRefinementLogEntry) => {
+  const next = [normalizePlannerRefinementLogEntry(entry), ...loadPlannerRefinementLogs()].slice(0, REFINEMENT_LOG_LIMIT);
+  savePlannerRefinementLogs(next);
+  return next[0];
 };

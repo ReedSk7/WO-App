@@ -1,11 +1,21 @@
 import { useMemo, useState } from 'react';
 import { DEFAULT_RESPONSE_MODE, PLANNER_RESPONSE_MODES } from './data/agentGuidance';
 import { MAXIMO_TABS } from './data/plannerSamples';
+import { findPlannerSite, PLANNER_SITES } from './data/plannerSites';
 import { ToastRegion } from './components/ui/ToastRegion';
 import { useClipboard } from './hooks/useClipboard';
 import { useTheme } from './hooks/useTheme';
-import { loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
-import type { MaximoTabId, PlannerPackage, PlannerResponseMode, PlannerReviewSession, PlannerTabEdits, PlannerTabContent } from './types';
+import { appendPlannerRefinementLog, loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
+import type {
+  MaximoTabId,
+  PlannerPackage,
+  PlannerRelatedRecord,
+  PlannerResponseMode,
+  PlannerReviewSession,
+  PlannerSiteId,
+  PlannerTabContent,
+  PlannerTabEdits,
+} from './types';
 import { downloadTextFile } from './utils/export';
 import { PLANNER_DISCLAIMER, createPlannerPackage } from './utils/plannerPackage';
 import {
@@ -19,6 +29,7 @@ import {
 } from './utils/refinementReport';
 
 type ScreenState = 'input' | 'result';
+type SiteSelectValue = PlannerSiteId | '';
 
 const exampleInputs = ['DEMO-CR-1001', 'DEMO-MPL-2001', 'DEMO-WO-3001'];
 
@@ -40,6 +51,16 @@ function formatEditedPackage(plannerPackage: PlannerPackage, tabEdits: PlannerTa
 function makeReviewSessionId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `review-${Date.now()}`;
+}
+
+function makeRevisionId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return `revision-${crypto.randomUUID()}`;
+  return `revision-${Date.now()}`;
+}
+
+function isAdminQueryEnabled() {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('admin') === '1';
 }
 
 function SummaryTile({ label, value }: { label: string; value: string }) {
@@ -135,11 +156,13 @@ function EditableTabPanel({
   tab,
   tabEdits,
   changedTabCount,
+  isAdminMode,
   onEditChange,
 }: {
   tab: PlannerTabContent;
   tabEdits: PlannerTabEdits;
   changedTabCount: number;
+  isAdminMode: boolean;
   onEditChange: (tabId: MaximoTabId, value: string) => void;
 }) {
   const generatedText = agentGeneratedText(tab);
@@ -162,9 +185,11 @@ function EditableTabPanel({
             Compare the agent baseline against the planner final text before copying into the work package.
           </p>
         </div>
-        <div className="rounded-md border border-border-subtle bg-surface-raisedLight px-3 py-2 text-xs font-semibold text-texttone-secondaryLight dark:bg-surface-raisedDark dark:text-texttone-secondaryDark">
-          Changed tabs: {changedTabCount}
-        </div>
+        {isAdminMode ? (
+          <div className="rounded-md border border-border-subtle bg-surface-raisedLight px-3 py-2 text-xs font-semibold text-texttone-secondaryLight dark:bg-surface-raisedDark dark:text-texttone-secondaryDark">
+            Changed tabs: {changedTabCount}
+          </div>
+        ) : null}
       </div>
 
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -189,36 +214,113 @@ function EditableTabPanel({
         </section>
       </div>
 
-      <section className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" aria-label={`Changes for ${tab.label}`}>
-        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">What changed for agent refinement</h3>
-        {changeTotal === 0 ? (
-          <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-            All {summary.kept} agent-generated lines are currently kept for copy/paste.
-          </p>
-        ) : (
-          <>
+      {isAdminMode ? (
+        <section className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" aria-label={`Changes for ${tab.label}`}>
+          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">What changed for agent refinement</h3>
+          {changeTotal === 0 ? (
             <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              Kept: {summary.kept} | Removed: {summary.removed} | Added: {summary.added} | Edited: {summary.edited}
+              All {summary.kept} agent-generated lines are currently kept for copy/paste.
             </p>
-            <ul className="mt-3 space-y-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              {details.map((change) => {
-                const label =
-                  change.type === 'added'
-                    ? `Line ${change.lineNumber} added: ${change.plannerFinal}`
-                    : change.type === 'removed'
-                      ? `Line ${change.lineNumber} removed: ${change.agentGenerated}`
-                      : `Line ${change.lineNumber} edited from "${change.agentGenerated}" to "${change.plannerFinal}"`;
-                return (
-                  <li className="flex gap-2" key={`${change.type}-${change.lineNumber}`}>
-                    <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-status-caution" />
-                    <span>{label}</span>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
-        )}
-      </section>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+                Kept: {summary.kept} | Removed: {summary.removed} | Added: {summary.added} | Edited: {summary.edited}
+              </p>
+              <ul className="mt-3 space-y-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+                {details.map((change) => {
+                  const label =
+                    change.type === 'added'
+                      ? `Line ${change.lineNumber} added: ${change.plannerFinal}`
+                      : change.type === 'removed'
+                        ? `Line ${change.lineNumber} removed: ${change.agentGenerated}`
+                        : `Line ${change.lineNumber} edited from "${change.agentGenerated}" to "${change.plannerFinal}"`;
+                  return (
+                    <li className="flex gap-2" key={`${change.type}-${change.lineNumber}`}>
+                      <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-status-caution" />
+                      <span>{label}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+        </section>
+      ) : null}
+    </section>
+  );
+}
+
+function RelationshipNodeButton({
+  active,
+  description,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  description: string;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-pressed={active}
+      className={`rounded-md border p-4 text-left transition ${
+        active
+          ? 'border-brand-500 bg-brand-500/10 text-texttone-primaryLight dark:border-brand-400 dark:text-texttone-primaryDark'
+          : 'border-border-subtle bg-surface-light text-texttone-primaryLight hover:border-border-strong hover:bg-surface-raisedLight dark:bg-surface-dark dark:text-texttone-primaryDark dark:hover:bg-surface-raisedDark'
+      }`}
+      onClick={onClick}
+      type="button"
+    >
+      <span className="label block">{description}</span>
+      <span className="mt-2 block text-sm font-semibold">{label}</span>
+    </button>
+  );
+}
+
+function RelationshipMappingPanel({
+  activeTabId,
+  plannerPackage,
+  onSelectTab,
+}: {
+  activeTabId: MaximoTabId;
+  plannerPackage: PlannerPackage;
+  onSelectTab: (tabId: MaximoTabId) => void;
+}) {
+  const relatedRecords = plannerPackage.relatedRecords;
+  const mapRelatedRecord = (record: PlannerRelatedRecord) => (
+    <RelationshipNodeButton
+      active={activeTabId === record.tabId}
+      description="Related fake record"
+      key={record.recordNumber}
+      label={`${record.recordNumber} - ${record.title}`}
+      onClick={() => onSelectTab(record.tabId)}
+    />
+  );
+
+  return (
+    <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Relationship Mapping">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="label">Relationship Mapping</p>
+          <h2 className="mt-2 text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Record click paths</h2>
+          <p className="mt-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            Click a fake related record to jump to the Maximo-style tab where that relationship should be reviewed.
+          </p>
+        </div>
+        <p className="text-xs font-semibold text-texttone-secondaryLight dark:text-texttone-secondaryDark">Site: {plannerPackage.siteLabel}</p>
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-4">
+        <RelationshipNodeButton
+          active={activeTabId === 'workorder'}
+          description="Source record"
+          label={plannerPackage.recordNumber}
+          onClick={() => onSelectTab('workorder')}
+        />
+        <RelationshipNodeButton active={activeTabId === 'logic'} description="Asset context" label={plannerPackage.asset} onClick={() => onSelectTab('logic')} />
+        {relatedRecords.map(mapRelatedRecord)}
+      </div>
     </section>
   );
 }
@@ -227,19 +329,23 @@ function InputScreen({
   input,
   error,
   selectedMode,
+  selectedSiteId,
   savedSession,
   onInputChange,
   onModeChange,
   onResumeSaved,
+  onSiteChange,
   onAnalyze,
 }: {
   input: string;
   error: string;
   selectedMode: PlannerResponseMode;
+  selectedSiteId: SiteSelectValue;
   savedSession: PlannerReviewSession | null;
   onInputChange: (value: string) => void;
   onModeChange: (mode: PlannerResponseMode) => void;
   onResumeSaved: () => void;
+  onSiteChange: (siteId: SiteSelectValue) => void;
   onAnalyze: () => void;
 }) {
   return (
@@ -257,7 +363,30 @@ function InputScreen({
         </div>
 
         <div className="pt-6">
-          <ModeSelector onModeChange={onModeChange} selectedMode={selectedMode} />
+          <label className="label block" htmlFor="site-select">
+            Select site
+          </label>
+          <select
+            aria-describedby="site-select-help planner-input-error"
+            className="input mt-2"
+            id="site-select"
+            onChange={(event) => onSiteChange(event.target.value as SiteSelectValue)}
+            value={selectedSiteId}
+          >
+            <option value="">Select a site</option>
+            {PLANNER_SITES.map((site) => (
+              <option key={site.id} value={site.id}>
+                {site.label}
+              </option>
+            ))}
+          </select>
+          <p className="helper mt-2" id="site-select-help">
+            Site selection is stored as review metadata only. Use fake/demo record inputs.
+          </p>
+
+          <div className="mt-5">
+            <ModeSelector onModeChange={onModeChange} selectedMode={selectedMode} />
+          </div>
 
           <label className="label mt-5 block" htmlFor="planner-input">
             paste or type CR/MPL/Work order number
@@ -281,7 +410,8 @@ function InputScreen({
                     Saved edit session: {savedSession.plannerPackage.recordNumber}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-                    Last saved {new Date(savedSession.updatedAt).toLocaleString()} with mode {savedSession.plannerPackage.modeLabel}.
+                    Last saved {new Date(savedSession.updatedAt).toLocaleString()} for {savedSession.plannerPackage.siteLabel} with mode{' '}
+                    {savedSession.plannerPackage.modeLabel}.
                   </p>
                 </div>
                 <button className="btn-secondary w-full sm:w-auto" onClick={onResumeSaved} type="button">
@@ -312,44 +442,9 @@ function InputScreen({
   );
 }
 
-function AssistantGuidancePanel({ plannerPackage }: { plannerPackage: PlannerPackage }) {
-  return (
-    <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Planning assistant guidance">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <div>
-          <p className="label">Planning assistant guidance</p>
-          <h2 className="mt-2 text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
-            {plannerPackage.modeLabel}
-          </h2>
-          <p className="mt-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">{plannerPackage.modeSummary}</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Source grounding</p>
-            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
-              Use the highest applicable approved source class and state conflicts plainly.
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Limits</p>
-            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
-              No live system access, work authorization, or operability decision is represented.
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold uppercase text-texttone-secondaryLight dark:text-texttone-secondaryDark">Output discipline</p>
-            <p className="mt-2 text-sm leading-6 text-texttone-primaryLight dark:text-texttone-primaryDark">
-              Separate facts, assumptions, missing information, risks, and planner next actions.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
 function ResultScreen({
   activeTabId,
+  isAdminMode,
   plannerPackage,
   tabEdits,
   onActiveTabChange,
@@ -362,6 +457,7 @@ function ResultScreen({
   onStartOver,
 }: {
   activeTabId: MaximoTabId;
+  isAdminMode: boolean;
   plannerPackage: PlannerPackage;
   tabEdits: PlannerTabEdits;
   onActiveTabChange: (tabId: MaximoTabId) => void;
@@ -378,7 +474,6 @@ function ResultScreen({
     [activeTabId, plannerPackage.tabs],
   );
   const changedTabs = changedTabsFor(plannerPackage, tabEdits);
-  const refinementReport = createRefinementReport(plannerPackage, tabEdits, 'active-session');
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-workbench px-4 py-6 sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
@@ -392,6 +487,11 @@ function ResultScreen({
             <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
               {plannerPackage.recordType} record: {plannerPackage.recordNumber}
             </p>
+            {isAdminMode ? (
+              <p className="mt-3 inline-flex rounded-md border border-status-caution/60 bg-status-caution/10 px-3 py-1 text-xs font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
+                Admin view
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <button className="btn-secondary w-full sm:w-auto" onClick={onCopyEditedTab} type="button">
@@ -403,12 +503,16 @@ function ResultScreen({
             <button className="btn w-full sm:w-auto" onClick={onSaveProgress} type="button">
               Save progress
             </button>
-            <button className="btn-secondary w-full sm:w-auto" onClick={onExportJson} type="button">
-              Export refinement JSON
-            </button>
-            <button className="btn-secondary w-full sm:w-auto" onClick={onExportMarkdown} type="button">
-              Export refinement Markdown
-            </button>
+            {isAdminMode ? (
+              <>
+                <button className="btn-secondary w-full sm:w-auto" onClick={onExportJson} type="button">
+                  Export refinement JSON
+                </button>
+                <button className="btn-secondary w-full sm:w-auto" onClick={onExportMarkdown} type="button">
+                  Export refinement Markdown
+                </button>
+              </>
+            ) : null}
             <button className="btn-secondary w-full sm:w-auto" onClick={onStartOver} type="button">
               Start over
             </button>
@@ -419,55 +523,15 @@ function ResultScreen({
           {PLANNER_DISCLAIMER}
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Planner package summary">
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Planner package summary">
+          <SummaryTile label="Site" value={plannerPackage.siteLabel} />
           <SummaryTile label="Mode" value={plannerPackage.modeLabel} />
           <SummaryTile label="Match" value={plannerPackage.status} />
           <SummaryTile label="Confidence" value={`${plannerPackage.confidence}/100`} />
           <SummaryTile label="Asset" value={plannerPackage.asset} />
         </section>
 
-        <AssistantGuidancePanel plannerPackage={plannerPackage} />
-
-        <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Planner edit summary">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Planner edit summary</h2>
-              <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-                Saved sessions preserve agent baseline text and planner final text for later review.
-              </p>
-            </div>
-            <p className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">
-              Changed tabs: {changedTabs.length}
-            </p>
-          </div>
-          {changedTabs.length > 0 ? (
-            <p className="mt-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              Edited tabs: {changedTabs.map((tab) => tab.label).join(', ')}
-            </p>
-          ) : (
-            <p className="mt-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-              No planner final text changes have been made yet.
-            </p>
-          )}
-          <dl className="mt-4 grid gap-3 sm:grid-cols-4">
-            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
-              <dt className="label">Kept</dt>
-              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.kept}</dd>
-            </div>
-            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
-              <dt className="label">Removed</dt>
-              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.removed}</dd>
-            </div>
-            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
-              <dt className="label">Added</dt>
-              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.added}</dd>
-            </div>
-            <div className="rounded-md bg-surface-raisedLight p-3 dark:bg-surface-raisedDark">
-              <dt className="label">Edited</dt>
-              <dd className="mt-1 text-base font-semibold">{refinementReport.totals.edited}</dd>
-            </div>
-          </dl>
-        </section>
+        <RelationshipMappingPanel activeTabId={activeTabId} onSelectTab={onActiveTabChange} plannerPackage={plannerPackage} />
 
         <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           <ReviewList items={plannerPackage.knownFacts} title="Known Conditions" />
@@ -487,7 +551,7 @@ function ResultScreen({
               <TabButton active={tab.id === activeTab.id} key={tab.id} label={tab.label} onClick={onActiveTabChange} tabId={tab.id} />
             ))}
           </div>
-          <EditableTabPanel changedTabCount={changedTabs.length} onEditChange={onEditChange} tab={activeTab} tabEdits={tabEdits} />
+          <EditableTabPanel changedTabCount={changedTabs.length} isAdminMode={isAdminMode} onEditChange={onEditChange} tab={activeTab} tabEdits={tabEdits} />
         </section>
       </div>
     </main>
@@ -510,6 +574,7 @@ export default function App() {
   const [screen, setScreen] = useState<ScreenState>('input');
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
+  const [selectedSiteId, setSelectedSiteId] = useState<SiteSelectValue>('');
   const [selectedMode, setSelectedMode] = useState<PlannerResponseMode>(DEFAULT_RESPONSE_MODE);
   const [activeTabId, setActiveTabId] = useState<MaximoTabId>('workorder');
   const [plannerPackage, setPlannerPackage] = useState<PlannerPackage | null>(null);
@@ -517,15 +582,21 @@ export default function App() {
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [reviewCreatedAt, setReviewCreatedAt] = useState<string | null>(null);
   const [savedSession, setSavedSession] = useState<PlannerReviewSession | null>(() => loadCurrentPlannerReviewSession());
+  const [isAdminMode] = useState(() => isAdminQueryEnabled());
 
   function analyzeInput() {
+    if (!selectedSiteId) {
+      setError('Select a site before analyzing a fake CR, MPL, or work order.');
+      return;
+    }
+
     if (!input.trim()) {
       setError('Enter a fake CR, MPL, work order number, or demo condition note before analyzing.');
       return;
     }
 
     setError('');
-    const nextPackage = createPlannerPackage(input, new Date(), selectedMode);
+    const nextPackage = createPlannerPackage(input, new Date(), selectedMode, findPlannerSite(selectedSiteId));
     setPlannerPackage(nextPackage);
     setTabEdits(createInitialTabEdits(nextPackage));
     setReviewSessionId(null);
@@ -543,6 +614,7 @@ export default function App() {
     setReviewCreatedAt(session.createdAt);
     setActiveTabId(session.activeTabId);
     setInput(session.plannerPackage.input);
+    setSelectedSiteId(session.plannerPackage.siteId === 'site-not-captured' ? '' : session.plannerPackage.siteId);
     setSelectedMode(session.plannerPackage.mode);
     setScreen('result');
     showToast('Saved progress loaded');
@@ -555,13 +627,27 @@ export default function App() {
   function saveProgress() {
     if (!plannerPackage) return;
     const now = new Date().toISOString();
+    const sessionId = reviewSessionId ?? makeReviewSessionId();
     const session = upsertPlannerReviewSession({
-      id: reviewSessionId ?? makeReviewSessionId(),
+      id: sessionId,
       plannerPackage,
       tabEdits,
       activeTabId,
       createdAt: reviewCreatedAt ?? plannerPackage.generatedAt,
       updatedAt: now,
+    });
+    const report = createRefinementReport(plannerPackage, tabEdits, session.id, now);
+    const revisionId = makeRevisionId();
+    appendPlannerRefinementLog({
+      id: `log-${revisionId}`,
+      sessionId: session.id,
+      revisionId,
+      savedAt: now,
+      siteId: plannerPackage.siteId,
+      siteLabel: plannerPackage.siteLabel,
+      recordNumber: plannerPackage.recordNumber,
+      activeTabId,
+      report,
     });
     setReviewSessionId(session.id);
     setReviewCreatedAt(session.createdAt);
@@ -605,6 +691,7 @@ export default function App() {
     setTabEdits({});
     setReviewSessionId(null);
     setReviewCreatedAt(null);
+    setSelectedSiteId('');
     setActiveTabId('workorder');
     setError('');
     setSavedSession(loadCurrentPlannerReviewSession());
@@ -621,6 +708,7 @@ export default function App() {
       {screen === 'result' && plannerPackage ? (
         <ResultScreen
           activeTabId={activeTabId}
+          isAdminMode={isAdminMode}
           onActiveTabChange={setActiveTabId}
           onCopyEditedPackage={copyEditedPackage}
           onCopyEditedTab={copyEditedTab}
@@ -640,8 +728,10 @@ export default function App() {
           onInputChange={setInput}
           onModeChange={setSelectedMode}
           onResumeSaved={resumeSavedProgress}
+          onSiteChange={setSelectedSiteId}
           savedSession={savedSession}
           selectedMode={selectedMode}
+          selectedSiteId={selectedSiteId}
         />
       )}
       <ToastRegion message={toast ?? copiedLabel} />

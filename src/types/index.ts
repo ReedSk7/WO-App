@@ -105,6 +105,12 @@ export type PlannerResponseMode =
   | 'review-work-order'
   | 'research-planning-basis'
   | 'general-guidance';
+export type PlannerSiteId =
+  | 'plant-farley'
+  | 'vogtle-1-2'
+  | 'vogtle-3-4'
+  | 'hatch'
+  | 'site-not-captured';
 
 export type MaximoTabId =
   | 'workorder'
@@ -123,6 +129,17 @@ export type MaximoTabId =
 export interface MaximoTabDefinition {
   id: MaximoTabId;
   label: string;
+}
+
+export interface PlannerSiteDefinition {
+  id: PlannerSiteId;
+  label: string;
+}
+
+export interface PlannerRelatedRecord {
+  recordNumber: string;
+  title: string;
+  tabId: MaximoTabId;
 }
 
 export interface PlannerTabContent extends MaximoTabDefinition {
@@ -148,6 +165,8 @@ export interface PlannerAssistantGuidance {
 export interface PlannerPackage {
   input: string;
   normalizedInput: string;
+  siteId: PlannerSiteId;
+  siteLabel: string;
   matchType: PlannerMatchType;
   mode: PlannerResponseMode;
   modeLabel: string;
@@ -171,6 +190,7 @@ export interface PlannerPackage {
   modeOutputSections: string[];
   modeFocus: string[];
   assistantGuidance: PlannerAssistantGuidance;
+  relatedRecords: PlannerRelatedRecord[];
   tabs: PlannerTabContent[];
 }
 
@@ -209,6 +229,8 @@ export interface RefinementTabSummary {
 export interface PlannerRefinementReport {
   sessionId: string;
   input: string;
+  siteId: PlannerSiteId;
+  siteLabel: string;
   mode: PlannerResponseMode;
   modeLabel: string;
   recordNumber: string;
@@ -223,4 +245,16 @@ export interface PlannerRefinementReport {
     edited: number;
   };
   tabs: RefinementTabSummary[];
+}
+
+export interface PlannerRefinementLogEntry {
+  id: string;
+  sessionId: string;
+  revisionId: string;
+  savedAt: string;
+  siteId: PlannerSiteId;
+  siteLabel: string;
+  recordNumber: string;
+  activeTabId: MaximoTabId;
+  report: PlannerRefinementReport;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PLANNER_SITES } from '../data/plannerSites';
 import { createPlannerPackage } from './plannerPackage';
 import {
   createRefinementReport,
@@ -43,7 +44,7 @@ describe('refinement report', () => {
   });
 
   it('exports JSON and Markdown with agent baseline and planner final text', () => {
-    const plannerPackage = createPlannerPackage('DEMO-WO-3001', fixedNow);
+    const plannerPackage = createPlannerPackage('DEMO-WO-3001', fixedNow, undefined, PLANNER_SITES[3]);
     const tab = plannerPackage.tabs[0];
     const tabEdits = {
       [tab.id]: `${tab.lines.join('\n')}\nPlanner final line used in copy/paste.`,
@@ -54,10 +55,13 @@ describe('refinement report', () => {
     const markdown = formatRefinementReportMarkdown(report);
 
     expect(report.changedTabs).toBe(1);
+    expect(report.siteLabel).toBe('Hatch');
     expect(report.totals.added).toBe(1);
+    expect(json).toContain('"siteLabel": "Hatch"');
     expect(json).toContain('"agentGeneratedBaseline"');
     expect(json).toContain('"plannerFinalText"');
     expect(markdown).toContain('### Agent Generated Baseline');
+    expect(markdown).toContain('- Site: Hatch');
     expect(markdown).toContain('### Planner Final Text For Copy/Paste');
     expect(markdown).toContain('Planner final line used in copy/paste.');
   });

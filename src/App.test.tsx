@@ -1,21 +1,43 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import App from './App';
+import { STORAGE_KEYS } from './storage/local';
+
+function selectSite(siteId = 'hatch') {
+  fireEvent.change(screen.getByLabelText('Select site'), {
+    target: { value: siteId },
+  });
+}
+
+function enterAndAnalyze(value: string, siteId = 'hatch') {
+  selectSite(siteId);
+  fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
+    target: { value },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+}
 
 beforeEach(() => {
+  window.history.pushState({}, '', '/');
   localStorage.clear();
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  window.history.pushState({}, '', '/');
 });
 
 describe('planner MVP app shell', () => {
-  it('renders the simple intake screen without the old multi-page navigation', () => {
+  it('renders the intake screen with site selection before lookup', () => {
     render(<App />);
 
     expect(screen.getByRole('link', { name: 'Skip to main content' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Select site')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Plant Farley' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Vogtle 1 and 2' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Vogtle 3 and 4' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Hatch' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Create Work Order Draft/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Review Work Order/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Research \/ Planning Basis/i })).toBeInTheDocument();
@@ -27,20 +49,30 @@ describe('planner MVP app shell', () => {
     expect(screen.queryByText('Maximo Field Builder')).not.toBeInTheDocument();
   });
 
-  it('analyzes a fake sample and shows the Maximo-style tabs in order', async () => {
+  it('requires a site and a fake record input before analysis', () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
-      target: { value: 'DEMO-CR-1001' },
-    });
     fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(screen.getByText('Select a site before analyzing a fake CR, MPL, or work order.')).toBeInTheDocument();
+
+    selectSite();
+    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    expect(screen.getByText('Enter a fake CR, MPL, work order number, or demo condition note before analyzing.')).toBeInTheDocument();
+  });
+
+  it('analyzes a fake sample and shows site metadata, relationship mapping, and Maximo tabs', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-CR-1001');
 
     expect(await screen.findByRole('heading', { name: 'Demo pump seal leakage planning review' })).toBeInTheDocument();
     expect(screen.getByText('CR record: DEMO-CR-1001')).toBeInTheDocument();
-    expect(screen.getAllByText('Create Work Order Draft').length).toBeGreaterThan(0);
-    expect(screen.getByText('Planning assistant guidance')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export refinement JSON' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Export refinement Markdown' })).toBeInTheDocument();
+    expect(screen.getByText('Hatch')).toBeInTheDocument();
+    expect(screen.getByText('Relationship Mapping')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /DEMO-WO-3004 - Seal inspection history/i })).toBeInTheDocument();
+    expect(screen.queryByText('Planning assistant guidance')).not.toBeInTheDocument();
+    expect(screen.queryByText('Planner edit summary')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export refinement JSON' })).not.toBeInTheDocument();
     expect(
       screen.getAllByText('Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.').length,
     ).toBeGreaterThan(0);
@@ -61,18 +93,25 @@ describe('planner MVP app shell', () => {
     ]);
   });
 
+  it('clicks relationship nodes to jump to related Maximo tabs', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-CR-1001');
+
+    await screen.findByRole('heading', { name: 'Demo pump seal leakage planning review' });
+    fireEvent.click(screen.getByRole('button', { name: /DEMO-MPL-2007 - Pump bay walkdown list/i }));
+
+    expect(screen.getByLabelText('Planner final text for copy/paste for Logic')).toBeInTheDocument();
+  });
+
   it('uses the selected response mode in the generated result', async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole('button', { name: /Research \/ Planning Basis/i }));
-    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
-      target: { value: 'DEMO-MPL-2001' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    enterAndAnalyze('DEMO-MPL-2001');
 
     expect(await screen.findByRole('heading', { name: 'Demo breaker inspection planning list item' })).toBeInTheDocument();
     expect(screen.getAllByText('Research / Planning Basis').length).toBeGreaterThan(0);
-    expect(screen.getByText('No live system access, work authorization, or operability decision is represented.')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Plans' }));
     expect((screen.getByLabelText('Planner final text for copy/paste for Plans') as HTMLTextAreaElement).value).toContain(
@@ -83,26 +122,41 @@ describe('planner MVP app shell', () => {
   it('uses a conservative generic package when no fake sample matches', async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
-      target: { value: 'demo unknown condition for planner review' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    enterAndAnalyze('demo unknown condition for planner review', 'plant-farley');
 
     expect(await screen.findByRole('heading', { name: 'Generic demo planner review package' })).toBeInTheDocument();
+    expect(screen.getByText('Plant Farley')).toBeInTheDocument();
     expect(screen.getByText('Generic fallback')).toBeInTheDocument();
     expect(screen.getAllByText('Needs planner confirmation').length).toBeGreaterThan(0);
   });
 
-  it('shows agent baseline beside planner final text and summarizes refinement changes', async () => {
+  it('keeps refinement changes hidden from normal planner view', async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
-      target: { value: 'DEMO-CR-1001' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    enterAndAnalyze('DEMO-CR-1001');
 
     const editBox = (await screen.findByLabelText('Planner final text for copy/paste for Workorder')) as HTMLTextAreaElement;
     expect(screen.getByText('Agent generated baseline')).toBeInTheDocument();
+    expect(screen.queryByText('What changed for agent refinement')).not.toBeInTheDocument();
+
+    fireEvent.change(editBox, {
+      target: { value: `${editBox.value}\nPlanner edit: confirm the approved source document before copy/paste.` },
+    });
+
+    expect(screen.queryByText('Kept: 11 | Removed: 0 | Added: 1 | Edited: 0')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Export refinement Markdown' })).not.toBeInTheDocument();
+  });
+
+  it('shows refinement changes and exports only in admin mode', async () => {
+    window.history.pushState({}, '', '/?admin=1');
+    render(<App />);
+
+    enterAndAnalyze('DEMO-CR-1001');
+
+    const editBox = (await screen.findByLabelText('Planner final text for copy/paste for Workorder')) as HTMLTextAreaElement;
+    expect(screen.getByText('Admin view')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement Markdown' })).toBeInTheDocument();
     expect(screen.getByText('What changed for agent refinement')).toBeInTheDocument();
     expect(screen.getByText('All 11 agent-generated lines are currently kept for copy/paste.')).toBeInTheDocument();
 
@@ -115,13 +169,10 @@ describe('planner MVP app shell', () => {
     expect(screen.getByText('Line 12 added: Planner edit: confirm the approved source document before copy/paste.')).toBeInTheDocument();
   });
 
-  it('saves planner edits and resumes them from local storage', async () => {
+  it('saves planner edits, logs refinement snapshots, and resumes from local storage', async () => {
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText('paste or type CR/MPL/Work order number'), {
-      target: { value: 'DEMO-WO-3001' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Analyze' }));
+    enterAndAnalyze('DEMO-WO-3001', 'vogtle-1-2');
 
     const editBox = (await screen.findByLabelText('Planner final text for copy/paste for Workorder')) as HTMLTextAreaElement;
     fireEvent.change(editBox, {
@@ -130,6 +181,10 @@ describe('planner MVP app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
 
     expect(screen.getByText('Progress saved')).toBeInTheDocument();
+    const logs = JSON.parse(localStorage.getItem(STORAGE_KEYS.plannerRefinementLogs) ?? '[]');
+    expect(logs).toHaveLength(1);
+    expect(logs[0].siteLabel).toBe('Vogtle 1 and 2');
+    expect(logs[0].report.tabs[0].plannerFinalText).toContain('Planner edit: preserve as-found notes for later review.');
 
     cleanup();
     render(<App />);
@@ -137,6 +192,7 @@ describe('planner MVP app shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resume saved progress' }));
 
     expect(await screen.findByRole('heading', { name: 'Demo valve actuator slow stroke draft review' })).toBeInTheDocument();
+    expect(screen.getByText('Vogtle 1 and 2')).toBeInTheDocument();
     expect((screen.getByLabelText('Planner final text for copy/paste for Workorder') as HTMLTextAreaElement).value).toContain(
       'Planner edit: preserve as-found notes for later review.',
     );

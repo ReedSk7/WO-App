@@ -84,6 +84,8 @@ export function createRefinementReport(
   return {
     sessionId,
     input: plannerPackage.input,
+    siteId: plannerPackage.siteId,
+    siteLabel: plannerPackage.siteLabel,
     mode: plannerPackage.mode,
     modeLabel: plannerPackage.modeLabel,
     recordNumber: plannerPackage.recordNumber,
@@ -105,6 +107,7 @@ export function formatRefinementReportMarkdown(report: PlannerRefinementReport) 
     `# Planner Refinement Report - ${report.recordNumber}`,
     '',
     `- Title: ${report.title}`,
+    `- Site: ${report.siteLabel}`,
     `- Mode: ${report.modeLabel}`,
     `- Input: ${report.input}`,
     `- Generated: ${report.generatedAt}`,

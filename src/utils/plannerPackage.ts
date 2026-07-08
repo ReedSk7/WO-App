@@ -1,6 +1,7 @@
 import { ASSISTANT_GUIDANCE, DEFAULT_RESPONSE_MODE, getPlannerModeDefinition } from '../data/agentGuidance';
 import { MAXIMO_TABS, plannerSamples, type PlannerSample } from '../data/plannerSamples';
-import type { MaximoTabId, PlannerPackage, PlannerRecordType, PlannerResponseMode, PlannerTabContent } from '../types';
+import { UNKNOWN_PLANNER_SITE } from '../data/plannerSites';
+import type { MaximoTabId, PlannerPackage, PlannerRecordType, PlannerResponseMode, PlannerSiteDefinition, PlannerTabContent } from '../types';
 
 export const PLANNER_DISCLAIMER =
   'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.';
@@ -87,8 +88,18 @@ function genericSample(normalizedInput: string): PlannerSample {
       'Confirm approved work direction, reviews, clearance needs, and scheduling holds.',
       'Confirm acceptance criteria and PMT source before any execution planning.',
     ],
-    relatedRecords: ['No related fake records matched this input.'],
+    relatedRecords: [
+      {
+        recordNumber: 'No matching fake records',
+        title: 'Planner to research related CR, MPL, and WO history',
+        tabId: 'related-records',
+      },
+    ],
   };
+}
+
+function relatedRecordLabel(record: PlannerSample['relatedRecords'][number]) {
+  return `${record.recordNumber} ${record.title}`;
 }
 
 function tabLines(
@@ -171,7 +182,7 @@ function tabLines(
     case 'related-records':
       return [
         `Source record: ${sample.recordNumber}`,
-        ...lineGroup('Related fake records for planner research', sample.relatedRecords),
+        ...lineGroup('Related fake records for planner research', sample.relatedRecords.map(relatedRecordLabel)),
         'Maintenance history and related records are research prompts only and do not expand the authorized scope.',
         'History use: suggest patterns only; do not use history as authority for work steps, PMT scope, acceptance criteria, limits, or operability conclusions.',
       ];
@@ -217,6 +228,7 @@ export function createPlannerPackage(
   rawInput: string,
   now: Date = new Date(),
   modeId: PlannerResponseMode = DEFAULT_RESPONSE_MODE,
+  site: PlannerSiteDefinition = UNKNOWN_PLANNER_SITE,
 ): PlannerPackage {
   const normalizedInput = normalizePlannerInput(rawInput);
   const sample = findSample(normalizedInput) ?? genericSample(normalizedInput);
@@ -235,6 +247,8 @@ export function createPlannerPackage(
   return {
     input: rawInput,
     normalizedInput,
+    siteId: site.id,
+    siteLabel: site.label,
     matchType: isSample ? 'sample' : 'generic',
     mode: mode.id,
     modeLabel: mode.label,
@@ -258,6 +272,7 @@ export function createPlannerPackage(
     modeOutputSections: mode.outputSections,
     modeFocus: mode.focus,
     assistantGuidance: ASSISTANT_GUIDANCE,
+    relatedRecords: sample.relatedRecords,
     tabs,
   };
 }

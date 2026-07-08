@@ -1,4 +1,4 @@
-import type { MaximoTabDefinition, PlannerRecordType } from '../types';
+import type { MaximoTabDefinition, PlannerRecordType, PlannerRelatedRecord } from '../types';
 
 export const MAXIMO_TABS: MaximoTabDefinition[] = [
   { id: 'workorder', label: 'Workorder' },
@@ -28,7 +28,7 @@ export type PlannerSample = {
   sourceSummary: string;
   knownFacts: string[];
   informationGaps: string[];
-  relatedRecords: string[];
+  relatedRecords: PlannerRelatedRecord[];
 };
 
 export const plannerSamples: PlannerSample[] = [
@@ -56,7 +56,18 @@ export const plannerSamples: PlannerSample[] = [
       'Confirm approved seal repair guidance and material availability.',
       'Confirm post-maintenance testing source document before planning release.',
     ],
-    relatedRecords: ['DEMO-WO-3004 seal inspection history', 'DEMO-MPL-2007 pump bay walkdown list'],
+    relatedRecords: [
+      {
+        recordNumber: 'DEMO-WO-3004',
+        title: 'Seal inspection history',
+        tabId: 'related-records',
+      },
+      {
+        recordNumber: 'DEMO-MPL-2007',
+        title: 'Pump bay walkdown list',
+        tabId: 'logic',
+      },
+    ],
   },
   {
     aliases: ['DEMO-MPL-2001', 'MPL2001', 'MPL-2001'],
@@ -82,7 +93,18 @@ export const plannerSamples: PlannerSample[] = [
       'Confirm whether any parts, test equipment, or support groups are required.',
       'Confirm whether this should become a corrective WO or inspection-only WO.',
     ],
-    relatedRecords: ['DEMO-CR-1018 breaker observation', 'DEMO-WO-3031 prior breaker inspection draft'],
+    relatedRecords: [
+      {
+        recordNumber: 'DEMO-CR-1018',
+        title: 'Breaker observation',
+        tabId: 'related-records',
+      },
+      {
+        recordNumber: 'DEMO-WO-3031',
+        title: 'Prior breaker inspection draft',
+        tabId: 'workorder',
+      },
+    ],
   },
   {
     aliases: ['DEMO-WO-3001', 'WO3001', 'WO-3001'],
@@ -108,6 +130,17 @@ export const plannerSamples: PlannerSample[] = [
       'Confirm clearance boundary through qualified review only.',
       'Confirm PMT and acceptance criteria from approved source documents.',
     ],
-    relatedRecords: ['DEMO-CR-1022 actuator trend note', 'DEMO-MPL-2015 valve gallery follow-up item'],
+    relatedRecords: [
+      {
+        recordNumber: 'DEMO-CR-1022',
+        title: 'Actuator trend note',
+        tabId: 'related-records',
+      },
+      {
+        recordNumber: 'DEMO-MPL-2015',
+        title: 'Valve gallery follow-up item',
+        tabId: 'logic',
+      },
+    ],
   },
 ];
