@@ -250,31 +250,123 @@ function EditableTabPanel({
   );
 }
 
-function RelationshipNodeButton({
+type RelationshipNodeKind = 'condition-report' | 'equipment' | 'significant-challenge' | 'source' | 'trouble-event' | 'work-order';
+
+type RelationshipGraphNode = {
+  id: string;
+  badge: string;
+  caption: string;
+  kind: RelationshipNodeKind;
+  label: string;
+  tabId: MaximoTabId;
+  x: number;
+  y: number;
+};
+
+const relationshipNodeStyles: Record<RelationshipNodeKind, { color: string; fill: string; legendLabel: string }> = {
+  'condition-report': {
+    color: '#f59e0b',
+    fill: 'rgba(245, 158, 11, 0.16)',
+    legendLabel: 'Condition Report',
+  },
+  equipment: {
+    color: '#84cc16',
+    fill: 'rgba(132, 204, 22, 0.14)',
+    legendLabel: 'Equipment',
+  },
+  'significant-challenge': {
+    color: '#fb7185',
+    fill: 'rgba(251, 113, 133, 0.14)',
+    legendLabel: 'Significant Nuclear Challenge',
+  },
+  source: {
+    color: '#67e8f9',
+    fill: 'rgba(103, 232, 249, 0.18)',
+    legendLabel: 'Selected Source',
+  },
+  'trouble-event': {
+    color: '#f0abfc',
+    fill: 'rgba(240, 171, 252, 0.14)',
+    legendLabel: 'Trouble Event',
+  },
+  'work-order': {
+    color: '#93c5fd',
+    fill: 'rgba(147, 197, 253, 0.15)',
+    legendLabel: 'Work Order',
+  },
+};
+
+const relationshipLegend: RelationshipNodeKind[] = [
+  'condition-report',
+  'significant-challenge',
+  'work-order',
+  'trouble-event',
+  'equipment',
+];
+
+const linkedNodePositions = [
+  { x: 30, y: 27 },
+  { x: 71, y: 30 },
+  { x: 76, y: 61 },
+  { x: 60, y: 77 },
+  { x: 38, y: 75 },
+  { x: 23, y: 57 },
+  { x: 50, y: 17 },
+];
+
+function relationshipKindForRecord(recordNumber: string): RelationshipNodeKind {
+  const normalizedRecordNumber = recordNumber.toUpperCase();
+  if (normalizedRecordNumber.includes('-SNC-') || normalizedRecordNumber.startsWith('SNC')) return 'significant-challenge';
+  if (normalizedRecordNumber.includes('-TE-') || normalizedRecordNumber.startsWith('TE')) return 'trouble-event';
+  if (normalizedRecordNumber.includes('-WO-') || normalizedRecordNumber.startsWith('WO')) return 'work-order';
+  if (normalizedRecordNumber.includes('-MPL-') || normalizedRecordNumber.startsWith('MPL')) return 'work-order';
+  if (normalizedRecordNumber.includes('-CR-') || normalizedRecordNumber.startsWith('CR')) return 'condition-report';
+  return 'condition-report';
+}
+
+function relationshipBadgeForRecord(recordNumber: string, fallback: string) {
+  const normalizedRecordNumber = recordNumber.toUpperCase();
+  if (normalizedRecordNumber.includes('-SNC-') || normalizedRecordNumber.startsWith('SNC')) return 'SNC';
+  if (normalizedRecordNumber.includes('-TE-') || normalizedRecordNumber.startsWith('TE')) return 'TE';
+  if (normalizedRecordNumber.includes('-MPL-') || normalizedRecordNumber.startsWith('MPL')) return 'MPL';
+  if (normalizedRecordNumber.includes('-WO-') || normalizedRecordNumber.startsWith('WO')) return 'WO';
+  if (normalizedRecordNumber.includes('-CR-') || normalizedRecordNumber.startsWith('CR')) return 'CR';
+  return fallback;
+}
+
+function RelationshipGraphNodeButton({
   active,
-  description,
-  label,
+  node,
   onClick,
 }: {
   active: boolean;
-  description: string;
-  label: string;
+  node: RelationshipGraphNode;
   onClick: () => void;
 }) {
+  const style = relationshipNodeStyles[node.kind];
+
   return (
-    <button
-      aria-pressed={active}
-      className={`rounded-md border p-4 text-left transition ${
-        active
-          ? 'border-brand-500 bg-brand-500/10 text-texttone-primaryLight dark:border-brand-400 dark:text-texttone-primaryDark'
-          : 'border-border-subtle bg-surface-light text-texttone-primaryLight hover:border-border-strong hover:bg-surface-raisedLight dark:bg-surface-dark dark:text-texttone-primaryDark dark:hover:bg-surface-raisedDark'
-      }`}
-      onClick={onClick}
-      type="button"
-    >
-      <span className="label block">{description}</span>
-      <span className="mt-2 block text-sm font-semibold">{label}</span>
-    </button>
+    <div className="absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center" style={{ left: `${node.x}%`, top: `${node.y}%` }}>
+      <button
+        aria-label={`${node.label} - ${node.caption}`}
+        aria-pressed={active}
+        className={`group flex items-center justify-center rounded-full border-2 text-[0.68rem] font-bold transition focus:outline-none focus:ring-2 focus:ring-cyan-100 ${
+          node.kind === 'source' ? 'h-14 w-14' : 'h-11 w-11'
+        } ${active ? 'scale-110' : 'hover:scale-105'}`}
+        onClick={onClick}
+        style={{
+          backgroundColor: active ? style.color : style.fill,
+          borderColor: style.color,
+          boxShadow: `0 0 0 1px ${style.color}66, 0 0 ${active ? '26px' : '16px'} ${style.color}55`,
+          color: active ? '#07141c' : '#f8fafc',
+        }}
+        type="button"
+      >
+        {node.badge}
+      </button>
+      <span className="mt-2 max-w-32 break-words text-center text-[0.7rem] font-semibold leading-tight text-slate-100">{node.label}</span>
+      <span className="mt-0.5 max-w-32 text-center text-[0.62rem] leading-tight text-slate-400">{node.caption}</span>
+    </div>
   );
 }
 
@@ -287,39 +379,124 @@ function RelationshipMappingPanel({
   plannerPackage: PlannerPackage;
   onSelectTab: (tabId: MaximoTabId) => void;
 }) {
-  const relatedRecords = plannerPackage.relatedRecords;
-  const mapRelatedRecord = (record: PlannerRelatedRecord) => (
-    <RelationshipNodeButton
-      active={activeTabId === record.tabId}
-      description="Related fake record"
-      key={record.recordNumber}
-      label={`${record.recordNumber} - ${record.title}`}
-      onClick={() => onSelectTab(record.tabId)}
-    />
-  );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const linkedNodes: RelationshipGraphNode[] = [
+    {
+      id: plannerPackage.asset,
+      badge: 'EQ',
+      caption: 'Asset context',
+      kind: 'equipment',
+      label: plannerPackage.asset,
+      tabId: 'logic',
+      ...linkedNodePositions[0],
+    },
+    ...plannerPackage.relatedRecords.map((record: PlannerRelatedRecord, index) => {
+      const position = linkedNodePositions[index + 1] ?? linkedNodePositions[linkedNodePositions.length - 1];
+      return {
+        id: record.recordNumber,
+        badge: relationshipBadgeForRecord(record.recordNumber, 'REL'),
+        caption: record.title,
+        kind: relationshipKindForRecord(record.recordNumber),
+        label: record.recordNumber,
+        tabId: record.tabId,
+        ...position,
+      };
+    }),
+  ];
+
+  const sourceNode: RelationshipGraphNode = {
+    id: plannerPackage.recordNumber,
+    badge: plannerPackage.recordType === 'Unknown' ? 'REC' : plannerPackage.recordType,
+    caption: 'Source record',
+    kind: 'source',
+    label: plannerPackage.recordNumber,
+    tabId: 'workorder',
+    x: 50,
+    y: 50,
+  };
+  const allNodes = [sourceNode, ...linkedNodes];
+  const selectedNode = selectedNodeId ? allNodes.find((node) => node.id === selectedNodeId) : null;
+  const activeNode = selectedNode?.tabId === activeTabId ? selectedNode : allNodes.find((node) => node.tabId === activeTabId) ?? sourceNode;
+  const similarWorkOrderCount = plannerPackage.relatedRecords.filter((record) => relationshipBadgeForRecord(record.recordNumber, '') === 'WO').length;
+
+  function selectGraphNode(node: RelationshipGraphNode) {
+    setSelectedNodeId(node.id);
+    onSelectTab(node.tabId);
+  }
 
   return (
-    <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark" aria-label="Relationship Mapping">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+    <section
+      className="overflow-hidden rounded-md border border-slate-700 bg-[#101820] text-slate-100 shadow-panel"
+      aria-label="Relationship Mapping"
+    >
+      <div className="flex flex-col gap-2 border-b border-slate-700/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="label">Relationship Mapping</p>
-          <h2 className="mt-2 text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Record click paths</h2>
-          <p className="mt-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-            Click a fake related record to jump to the Maximo-style tab where that relationship should be reviewed.
-          </p>
+          <p className="label text-cyan-100">Relationship Mapping</p>
+          <h2 className="mt-1 text-sm font-bold uppercase tracking-[0.16em] text-slate-100">Relationship Map</h2>
         </div>
-        <p className="text-xs font-semibold text-texttone-secondaryLight dark:text-texttone-secondaryDark">Site: {plannerPackage.siteLabel}</p>
+        <p className="font-mono text-xs font-semibold text-slate-300">
+          {plannerPackage.recordNumber} + {linkedNodes.length} linked records
+        </p>
       </div>
 
-      <div className="mt-4 grid gap-3 lg:grid-cols-4">
-        <RelationshipNodeButton
-          active={activeTabId === 'workorder'}
-          description="Source record"
-          label={plannerPackage.recordNumber}
-          onClick={() => onSelectTab('workorder')}
-        />
-        <RelationshipNodeButton active={activeTabId === 'logic'} description="Asset context" label={plannerPackage.asset} onClick={() => onSelectTab('logic')} />
-        {relatedRecords.map(mapRelatedRecord)}
+      <div
+        className="relative min-h-[23rem] overflow-hidden"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(148, 163, 184, 0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.09) 1px, transparent 1px), radial-gradient(circle at 50% 48%, rgba(34, 211, 238, 0.12), transparent 36%)',
+          backgroundSize: '64px 64px, 64px 64px, auto',
+        }}
+      >
+        <svg aria-hidden="true" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+          {linkedNodes.map((node) => (
+            <line key={`${node.id}-line`} stroke="rgba(148, 163, 184, 0.28)" strokeWidth="0.35" x1={sourceNode.x} x2={node.x} y1={sourceNode.y} y2={node.y} />
+          ))}
+          {activeNode.id !== sourceNode.id ? (
+            <g>
+              <line stroke="#a5f3fc" strokeWidth="0.8" x1={sourceNode.x} x2={activeNode.x} y1={sourceNode.y} y2={activeNode.y} />
+              <line
+                stroke="#f8fafc"
+                strokeDasharray="1.5 1.8"
+                strokeLinecap="round"
+                strokeWidth="0.45"
+                x1={sourceNode.x}
+                x2={activeNode.x}
+                y1={sourceNode.y}
+                y2={activeNode.y}
+              />
+            </g>
+          ) : null}
+        </svg>
+        <RelationshipGraphNodeButton active={activeNode.id === sourceNode.id} node={sourceNode} onClick={() => selectGraphNode(sourceNode)} />
+        {linkedNodes.map((node) => (
+          <RelationshipGraphNodeButton active={activeNode.id === node.id} key={node.id} node={node} onClick={() => selectGraphNode(node)} />
+        ))}
+        <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-x-5 gap-y-2 border-t border-slate-700/80 bg-[#101820]/88 px-4 py-3 backdrop-blur">
+          {relationshipLegend.map((kind) => (
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-200" key={kind}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: relationshipNodeStyles[kind].color }} />
+              <span>{relationshipNodeStyles[kind].legendLabel}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-3 border-t border-slate-700/80 bg-[#14202a] p-4 sm:grid-cols-3">
+        <div className="rounded-md border border-slate-600/80 bg-slate-900/35 p-4 text-center">
+          <p className="text-3xl font-bold text-lime-300">{plannerPackage.knownFacts.length}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">Verified Facts</p>
+          <p className="mt-1 text-xs text-slate-400">source-backed</p>
+        </div>
+        <div className="rounded-md border border-slate-600/80 bg-slate-900/35 p-4 text-center">
+          <p className="text-3xl font-bold text-amber-300">{plannerPackage.informationGaps.length}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">Information Gaps</p>
+          <p className="mt-1 text-xs text-slate-400">planner verification</p>
+        </div>
+        <div className="rounded-md border border-slate-600/80 bg-slate-900/35 p-4 text-center">
+          <p className="text-3xl font-bold text-sky-300">{similarWorkOrderCount}</p>
+          <p className="mt-1 text-sm font-semibold text-slate-100">Similar WOs Found</p>
+          <p className="mt-1 text-xs text-slate-400">fake WO history</p>
+        </div>
       </div>
     </section>
   );

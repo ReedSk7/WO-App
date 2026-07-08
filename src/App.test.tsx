@@ -70,6 +70,10 @@ describe('planner MVP app shell', () => {
     expect(screen.getByText('Hatch')).toBeInTheDocument();
     expect(screen.getByText('Relationship Mapping')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /DEMO-WO-3004 - Seal inspection history/i })).toBeInTheDocument();
+    expect(screen.getByText('Condition Report')).toBeInTheDocument();
+    expect(screen.getByText('Significant Nuclear Challenge')).toBeInTheDocument();
+    expect(screen.getByText('Verified Facts')).toBeInTheDocument();
+    expect(screen.getByText('Similar WOs Found')).toBeInTheDocument();
     expect(screen.queryByText('Planning assistant guidance')).not.toBeInTheDocument();
     expect(screen.queryByText('Planner edit summary')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Export refinement JSON' })).not.toBeInTheDocument();
