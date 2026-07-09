@@ -1,0 +1,9 @@
+- Use fake/demo data only.
+- Do not include real nuclear plant data.
+- Do not invent technical values.
+- Keep draft output conservative.
+- Run typecheck/build before final response.
+- Prefer small, clean components.
+- Keep user-facing wording direct and planner-friendly.
+- Keep UI conservative, planner-friendly, and modern-industrial; do not turn this into a flashy consumer dashboard.
+- Preserve localStorage-only behavior unless the user explicitly asks for a backend or integration layer.

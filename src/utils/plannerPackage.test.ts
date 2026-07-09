@@ -1,0 +1,111 @@
+import { describe, expect, it } from 'vitest';
+import { PLANNER_RESPONSE_MODES } from '../data/agentGuidance';
+import { MAXIMO_TABS } from '../data/plannerSamples';
+import { PLANNER_SITES } from '../data/plannerSites';
+import { createPlannerPackage, PLANNER_DISCLAIMER } from './plannerPackage';
+
+const fixedNow = new Date('2026-07-01T12:00:00.000Z');
+const forbiddenPublicTerms = [
+  ['Data', 'bricks'].join(''),
+  ['Genie', ' ', 'Space'].join(''),
+  ['wo', '_plan', '_assistant'].join(''),
+  ['agg', '_oe', '_cr', '_te', '_data', '_vsi'].join(''),
+  ['wo', '_text', '_index'].join(''),
+];
+
+describe('planner package generation', () => {
+  it('matches canned fake records and preserves the Maximo tab order', () => {
+    const plannerPackage = createPlannerPackage('please analyze DEMO-MPL-2001', fixedNow, undefined, PLANNER_SITES[1]);
+
+    expect(plannerPackage.siteLabel).toBe('Vogtle 1 and 2');
+    expect(plannerPackage.matchType).toBe('sample');
+    expect(plannerPackage.modeLabel).toBe('Create Work Order Draft');
+    expect(plannerPackage.recordType).toBe('MPL');
+    expect(plannerPackage.recordNumber).toBe('DEMO-MPL-2001');
+    expect(plannerPackage.relatedRecords[0]).toMatchObject({ recordNumber: 'DEMO-CR-1018', tabId: 'related-records' });
+    expect(plannerPackage.tabs.map((tab) => tab.label)).toEqual(MAXIMO_TABS.map((tab) => tab.label));
+    expect(plannerPackage.tabs[0].lines).toContain(PLANNER_DISCLAIMER);
+  });
+
+  it('creates a conservative generic fallback when no sample matches', () => {
+    const plannerPackage = createPlannerPackage('demo condition needs planning review', fixedNow);
+
+    expect(plannerPackage.matchType).toBe('generic');
+    expect(plannerPackage.recordType).toBe('Unknown');
+    expect(plannerPackage.status).toBe('Generic fallback');
+    expect(plannerPackage.asset).toBe('Needs planner confirmation');
+    expect(plannerPackage.confidence).toBe(34);
+  });
+
+  it('includes required review warnings without real plant details', () => {
+    const plannerPackage = createPlannerPackage('DEMO-WO-3001', fixedNow);
+    const outputText = plannerPackage.tabs.flatMap((tab) => tab.lines).join('\n');
+
+    expect(outputText).toContain(PLANNER_DISCLAIMER);
+    expect(outputText).toContain(
+      'This is not a clearance boundary. Potential isolation points are listed for review only. Qualified operations/electrical review required.',
+    );
+    expect(outputText).toContain(
+      'Clearance scope must align with final approved work instructions. This app does not create or approve clearance boundaries.',
+    );
+    expect(outputText).toContain(
+      'Use approved procedure, engineering direction, vendor manual, or qualified test guidance for acceptance criteria and PMT basis.',
+    );
+    expect(outputText).toContain(
+      'Acceptance criteria must come from approved procedure, engineering direction, vendor manual, or qualified test guidance.',
+    );
+    expect(outputText).toContain('Fire protection screening: required for every generated demo WO package.');
+    expect(outputText).toContain('Task-level ORA: required for non-administrative work.');
+    expect(outputText).not.toMatch(new RegExp(`\\b${['Ha', 'tch'].join('')}\\b`, 'i'));
+    expect(outputText).not.toMatch(/\breal plant\b/i);
+    expect(outputText).not.toMatch(/\btorque\s+\d+/i);
+    expect(outputText).not.toMatch(/\bsetpoint\s+\d+/i);
+  });
+
+  it('creates Plans task blocks for Maximo long-description copy/paste', () => {
+    const plannerPackage = createPlannerPackage('DEMO-WO-3001', fixedNow, 'research-planning-basis');
+    const plansTab = plannerPackage.tabs.find((tab) => tab.id === 'plans');
+
+    expect(plansTab?.copyBlocks?.map((block) => block.sequence)).toEqual([10, 11, 12, 13, 14, 15, 20]);
+    expect(plansTab?.copyBlocks?.[0]).toMatchObject({ sequence: 10, summary: 'WORK SCOPE' });
+    expect(plansTab?.copyBlocks?.[0].longDescription).toContain('Source record: DEMO-WO-3001.');
+    expect(plansTab?.copyBlocks?.[0].longDescription).not.toContain('WORK SCOPE');
+    expect(plansTab?.copyBlocks?.[6].longDescription).toContain('- Treat history as context, not authority.');
+    expect(plansTab?.lines.join('\n')).toContain('Task 10 - WORK SCOPE');
+  });
+
+  it('adds distinct public-safe guidance for each response mode', () => {
+    for (const mode of PLANNER_RESPONSE_MODES) {
+      const plannerPackage = createPlannerPackage('DEMO-CR-1001', fixedNow, mode.id);
+      const outputText = plannerPackage.tabs.flatMap((tab) => tab.lines).join('\n');
+
+      expect(plannerPackage.mode).toBe(mode.id);
+      expect(plannerPackage.modeLabel).toBe(mode.label);
+      expect(plannerPackage.modeOutputSections).toEqual(mode.outputSections);
+      expect(outputText).toContain(`Response mode: ${mode.label}`);
+      expect(outputText).toContain(mode.summary);
+    }
+  });
+
+  it('keeps generated guidance separated into planner review categories', () => {
+    const plannerPackage = createPlannerPackage('DEMO-MPL-2001', fixedNow, 'review-work-order');
+    const outputText = plannerPackage.tabs.flatMap((tab) => tab.lines).join('\n');
+
+    expect(plannerPackage.assumptions.length).toBeGreaterThan(0);
+    expect(plannerPackage.risks.length).toBeGreaterThan(0);
+    expect(plannerPackage.plannerNextActions.length).toBeGreaterThan(0);
+    expect(outputText).toContain('Assumptions:');
+    expect(outputText).toContain('Risks:');
+    expect(outputText).toContain('Planner next actions:');
+  });
+
+  it('does not expose internal system or tool names in generated packages', () => {
+    const corpus = PLANNER_RESPONSE_MODES.map((mode) => createPlannerPackage('DEMO-WO-3001', fixedNow, mode.id, PLANNER_SITES[0]))
+      .map((plannerPackage) => JSON.stringify(plannerPackage))
+      .join('\n');
+
+    for (const term of forbiddenPublicTerms) {
+      expect(corpus).not.toContain(term);
+    }
+  });
+});
