@@ -15,6 +15,13 @@ export type EntranceValues = {
   workRequired: WorkRequired;
 };
 
+const entranceSiteOptions = [
+  { id: 'HATCH-U1', label: 'Plant Hatch', description: 'BWR fleet context for Plant Hatch.' },
+  { id: 'FARLEY-U1', label: 'Plant Farley', description: 'PWR fleet context for Plant Farley.' },
+  { id: 'VOGTLE-U1', label: 'Vogtle 1/2', description: 'PWR fleet context for Vogtle Units 1 and 2.' },
+  { id: 'VOGTLE-U3', label: 'Vogtle 3/4', description: 'AP1000 fleet context for Vogtle Units 3 and 4.' },
+];
+
 export function EntranceScreen({
   onAnalyze,
   siteOptions,
@@ -85,14 +92,16 @@ export function EntranceScreen({
                 <span className="field-label">Site</span>
                 <select aria-label="Site" className="field mt-2" onChange={(event) => updateField('siteId', event.target.value)} value={values.siteId}>
                   <option value="">Select a site</option>
-                  {siteOptions.map((site) => (
+                  {entranceSiteOptions.map((site) => (
                     <option key={site.id} value={site.id}>
                       {site.label}
                     </option>
                   ))}
                 </select>
                 <span className="mt-2 block min-h-10 text-xs leading-5 text-app-muted">
-                  {values.siteId ? siteOptions.find((site) => site.id === values.siteId)?.description : 'Fleet-aware demo context only.'}
+                  {values.siteId
+                    ? entranceSiteOptions.find((site) => site.id === values.siteId)?.description ?? siteOptions.find((site) => site.id === values.siteId)?.description
+                    : 'Fleet-aware demo context only.'}
                 </span>
               </label>
 

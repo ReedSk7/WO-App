@@ -20,6 +20,11 @@ describe('CR Planning Companion', () => {
     render(<App />);
 
     expect(screen.getByRole('heading', { name: /Select SNC site and source record/i })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Plant Hatch' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Plant Farley' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Vogtle 1/2' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Vogtle 3/4' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Plant Hatch Unit 1/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Analyze record/i }));
 
