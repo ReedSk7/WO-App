@@ -5,13 +5,34 @@ function csvValue(value: string | number) {
 }
 
 export function buildScreeningReportCsv(records: ConditionRecord[]) {
-  const headings = ['CR Number', 'Record Type', 'Description', 'Location', 'Status', 'WO Type', 'Criticality', 'Priority', '% Complete', 'Owner'];
+  const headings = [
+    'CR Number',
+    'Record Type',
+    'Plant',
+    'Unit',
+    'Description',
+    'Location',
+    'Status',
+    'Decision State',
+    'Readiness Score',
+    'Open Gaps',
+    'WO Type',
+    'Criticality',
+    'Priority',
+    '% Complete',
+    'Owner',
+  ];
   const rows = records.map((record) => [
     record.recordNumber,
     record.recordType,
+    record.plant,
+    record.unit,
     record.description,
     record.location,
     record.status,
+    record.decisionState,
+    `${record.readinessScore}%`,
+    record.readinessGaps.length,
     record.woType,
     record.criticality,
     record.priority,

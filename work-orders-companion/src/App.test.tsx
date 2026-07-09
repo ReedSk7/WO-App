@@ -7,7 +7,7 @@ async function startDashboard(input = 'DEMO-CR-1001') {
   const user = userEvent.setup();
   render(<App />);
 
-  await user.selectOptions(screen.getByRole('combobox', { name: /^Site$/i }), 'SITE-A');
+  await user.selectOptions(screen.getByRole('combobox', { name: /^Site$/i }), 'HATCH-U1');
   await user.type(screen.getByLabelText(/CR, WO, PM, or condition note/i), input);
   await user.click(screen.getByRole('button', { name: /Analyze record/i }));
 
@@ -19,7 +19,7 @@ describe('CR Planning Companion', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /Select site and source record/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Select SNC site and source record/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Analyze record/i }));
 
@@ -30,6 +30,7 @@ describe('CR Planning Companion', () => {
     await startDashboard();
 
     expect(screen.getByRole('heading', { name: /CR Details - DEMO-CR-1001/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Planner Command Center/i })).toBeInTheDocument();
     expect(screen.getByText(/Databricks Agent Output/i)).toBeInTheDocument();
     expect(screen.queryByText(/\bWR\b/)).not.toBeInTheDocument();
   });

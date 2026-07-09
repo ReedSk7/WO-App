@@ -21,10 +21,10 @@ export function FiltersBar({
   return (
     <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
       <h2 className="text-sm font-bold text-app-navy" id="condition-reports-heading">
-        Condition Reports
+        CR / WO / PM Queue
       </h2>
       <div className="flex flex-1 flex-col gap-3 sm:flex-row">
-        <select className="field sm:w-36" onChange={(event) => onSiteFilterChange(event.target.value)} value={siteFilter}>
+        <select aria-label="Filter by site" className="field sm:w-64" onChange={(event) => onSiteFilterChange(event.target.value)} value={siteFilter}>
           <option>All Sites</option>
           {siteOptions.map((site) => (
             <option key={site.id} value={site.id}>
@@ -33,6 +33,7 @@ export function FiltersBar({
           ))}
         </select>
         <select
+          aria-label="Filter by status"
           className="field sm:w-40"
           onChange={(event) => onStatusFilterChange(event.target.value as RecordStatus | 'All Status')}
           value={statusFilter}

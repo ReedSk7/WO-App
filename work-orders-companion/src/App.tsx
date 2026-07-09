@@ -17,20 +17,33 @@ import { Icon } from './components/ui/Icon';
 import { AddConditionReportModal, type AddConditionReportValues } from './components/workRequests/AddWorkRequestModal';
 import { DetailsPanel, type DetailTab } from './components/workRequests/DetailsPanel';
 import { FiltersBar } from './components/workRequests/FiltersBar';
+import { PlanningCommandCenter } from './components/workRequests/PlanningCommandCenter';
 import { ScreeningToolbar } from './components/workRequests/ScreeningToolbar';
 import { ConditionRecordTable } from './components/workRequests/WorkRequestTable';
 
 function recordMatchesSearch(record: ConditionRecord, search: string) {
   if (!search.trim()) return true;
   const needle = search.trim().toLowerCase();
-  return [record.recordNumber, record.recordType, record.description, record.location, record.status, record.woType, record.owner]
+  return [
+    record.recordNumber,
+    record.recordType,
+    record.description,
+    record.location,
+    record.status,
+    record.decisionState,
+    record.woType,
+    record.owner,
+    record.plant,
+    record.unit,
+    record.reactorFamily,
+  ]
     .join(' ')
     .toLowerCase()
     .includes(needle);
 }
 
-function getSiteLabel(siteId: string) {
-  return siteOptions.find((site) => site.id === siteId)?.label ?? siteId;
+function getSite(siteId: string) {
+  return siteOptions.find((site) => site.id === siteId) ?? siteOptions[0];
 }
 
 function getRoleLabel(roleId: string) {
@@ -73,13 +86,21 @@ export default function App() {
     if (!values.siteId) return 'Select a site before analyzing a CR, WO, PM, or condition note.';
     if (!values.input.trim()) return 'Enter a CR, WO, PM, or condition note.';
 
+    const site = getSite(values.siteId);
     const nextSession: AppSession = {
       siteId: values.siteId,
-      siteLabel: getSiteLabel(values.siteId),
+      siteLabel: site.label,
+      plant: site.plant,
+      unit: site.unit,
+      reactorFamily: site.reactorFamily,
       userRoleId: values.userRoleId,
       userRoleLabel: getRoleLabel(values.userRoleId),
       recordType: values.recordType,
       input: values.input.trim(),
+      consequence: values.consequence,
+      immediateAction: values.immediateAction,
+      constraints: values.constraints,
+      workRequired: values.workRequired,
       startedAt: new Date().toISOString(),
     };
 
@@ -115,12 +136,16 @@ export default function App() {
   }
 
   function addConditionReport(values: AddConditionReportValues) {
+    const site = session ? getSite(session.siteId) : getSite('HATCH-U1');
     const nextRecord = {
       ...createMockConditionRecord(records.length + 1),
       description: values.description,
       location: values.location,
       owner: values.owner,
-      siteId: session?.siteId ?? 'SITE-A',
+      siteId: site.id,
+      plant: site.plant,
+      unit: site.unit,
+      reactorFamily: site.reactorFamily,
       detailDescription: `${values.description}. This is a local demo CR and must be replaced with governed Maximo/API data before production use.`,
     };
     setRecords((current) => [nextRecord, ...current]);
@@ -150,6 +175,19 @@ export default function App() {
       movedToPlanning: true,
       percentComplete: Math.max(record.percentComplete, 50),
       status: 'PLANNING',
+      decisionState: 'Ready for Planning',
+      readinessScore: Math.max(record.readinessScore, 82),
+      plannerActions: record.plannerActions.map((action, index) =>
+        index === record.plannerActions.length - 1 ? { ...action, status: 'Ready', tone: 'good' } : action,
+      ),
+      auditTrail: [
+        ...record.auditTrail,
+        {
+          label: 'Route action',
+          detail: 'User routed this mock record to planning queue.',
+          timestamp: 'Current demo session',
+        },
+      ],
     }));
     showToast(`${selectedRecordNumber} routed to planning queue`);
   }
@@ -171,14 +209,14 @@ export default function App() {
               <Icon className="h-5 w-5" name="logo" />
             </span>
             <div>
-              <p className="text-base font-bold leading-5 text-app-navy">CR Planning</p>
+              <p className="text-base font-bold leading-5 text-app-navy">SNC CR Planning</p>
               <p className="text-base font-bold leading-5 text-app-navy">Companion</p>
             </div>
           </div>
           <WorkflowTabs activeStep={activeStep} onStepChange={setActiveStep} />
           <main className="mx-auto max-w-dashboard px-4 py-5 lg:px-6" id="screening" tabIndex={-1}>
             <section className="mb-4 grid gap-3 rounded-xl border border-app-line bg-white p-3 shadow-soft lg:grid-cols-[1fr_auto]" aria-label="Current planning session">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
                 <div>
                   <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Site</p>
                   <p className="mt-1 text-sm font-bold text-app-navy">{session.siteLabel}</p>
@@ -190,6 +228,10 @@ export default function App() {
                 <div>
                   <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Source type</p>
                   <p className="mt-1 text-sm font-bold text-app-navy">{session.recordType}</p>
+                </div>
+                <div>
+                  <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Work marker</p>
+                  <p className="mt-1 text-sm font-bold text-app-navy">{session.workRequired}</p>
                 </div>
                 <div>
                   <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Input</p>
@@ -215,6 +257,7 @@ export default function App() {
                   onMoveToPlanning={moveToPlanning}
                   onRefresh={refreshFromMaximo}
                 />
+                <PlanningCommandCenter onMoveToPlanning={moveToPlanning} record={selectedRecord} />
                 <FiltersBar
                   onSearchChange={setSearch}
                   onSiteFilterChange={setSiteFilter}

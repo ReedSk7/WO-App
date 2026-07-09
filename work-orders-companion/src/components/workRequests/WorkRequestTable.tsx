@@ -3,7 +3,7 @@ import { cn } from '../../utils/cn';
 import { CriticalityBadge, RecordTypeBadge, StatusBadge } from '../ui/Badge';
 import { ProgressBar } from '../ui/ProgressBar';
 
-const columns = ['CR Number', 'Description', 'Location', 'Status', 'WO Type', 'Criticality', 'Priority', '% Complete', 'Owner'];
+const columns = ['CR Number', 'Site / Unit', 'Description', 'Location', 'Status', 'Decision', 'WO Type', 'Criticality', 'Priority', 'Readiness', 'Owner'];
 
 export function ConditionRecordTable({
   selectedRecordNumber,
@@ -17,7 +17,7 @@ export function ConditionRecordTable({
   return (
     <section className="panel overflow-hidden" aria-labelledby="condition-reports-heading">
       <div className="overflow-x-auto">
-        <table className="min-w-[62rem] w-full border-collapse text-left">
+        <table className="min-w-[76rem] w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-app-line bg-white">
               <th className="w-10 px-3 py-2 text-xs font-bold text-app-muted" aria-label="Selected record" />
@@ -68,6 +68,9 @@ export function ConditionRecordTable({
                       <RecordTypeBadge recordType={record.recordType} />
                     </div>
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">
+                    {record.plant} {record.unit}
+                  </td>
                   <td className="max-w-60 px-3 py-2 text-xs font-semibold leading-4 text-app-navy">
                     <span className="line-clamp-2">{record.description}</span>
                   </td>
@@ -75,6 +78,7 @@ export function ConditionRecordTable({
                   <td className="whitespace-nowrap px-3 py-2">
                     <StatusBadge status={record.status} />
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-purple">{record.decisionState}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.woType}</td>
                   <td className="whitespace-nowrap px-3 py-2">
                     <CriticalityBadge value={record.criticality} />
@@ -82,8 +86,8 @@ export function ConditionRecordTable({
                   <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.priority}</td>
                   <td className="w-28 whitespace-nowrap px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <span className="w-9 text-xs font-semibold text-app-navy">{record.percentComplete}%</span>
-                      <ProgressBar value={record.percentComplete} />
+                      <span className="w-9 text-xs font-semibold text-app-navy">{record.readinessScore}%</span>
+                      <ProgressBar value={record.readinessScore} />
                     </div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.owner}</td>

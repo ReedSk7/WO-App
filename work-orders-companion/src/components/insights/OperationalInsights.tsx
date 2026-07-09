@@ -6,6 +6,9 @@ import { ProgressBar } from '../ui/ProgressBar';
 const iconByInsight: Record<string, IconName> = {
   classification: 'shield',
   related: 'integrations',
+  workability: 'check',
+  'ops-risk': 'warning',
+  materials: 'planning',
   hre: 'warning',
   cspv: 'shield',
 };
@@ -71,7 +74,7 @@ export function OperationalInsights({ record }: { record: ConditionRecord }) {
             <div className="mt-2">
               <p className="text-xs font-bold uppercase tracking-wide text-app-muted">Findings</p>
               <ul className="mt-1.5 space-y-1 text-xs leading-5 text-app-navy">
-                {insight.findings.slice(0, 1).map((finding) => (
+                {insight.findings.slice(0, 2).map((finding) => (
                   <li className="flex gap-2" key={finding}>
                     <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-app-navy" />
                     <span>{finding}</span>

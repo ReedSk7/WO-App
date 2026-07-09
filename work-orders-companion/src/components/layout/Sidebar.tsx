@@ -34,7 +34,7 @@ export function Sidebar({ userRoleLabel = 'Planner' }: { userRoleLabel?: string 
             <Icon className="h-5 w-5" name="logo" />
           </span>
           <div>
-            <p className="text-base font-bold leading-5 text-app-navy">CR Planning</p>
+            <p className="text-base font-bold leading-5 text-app-navy">SNC CR Planning</p>
             <p className="text-base font-bold leading-5 text-app-navy">Companion</p>
           </div>
         </div>

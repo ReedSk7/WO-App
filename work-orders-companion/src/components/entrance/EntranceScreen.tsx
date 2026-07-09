@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import type { RecordType, SiteOption, UserRoleOption } from '../../types';
-import { demoInputs, recordTypeOptions } from '../../data/mockWorkRequests';
+import type { RecordType, SiteOption, UserRoleOption, WorkRequired } from '../../types';
+import { consequenceOptions, demoInputs, planningConstraintOptions, recordTypeOptions, workRequiredOptions } from '../../data/mockWorkRequests';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 
@@ -9,6 +9,10 @@ export type EntranceValues = {
   recordType: RecordType;
   siteId: string;
   userRoleId: string;
+  consequence: string;
+  immediateAction: string;
+  constraints: string[];
+  workRequired: WorkRequired;
 };
 
 export function EntranceScreen({
@@ -25,11 +29,25 @@ export function EntranceScreen({
     recordType: 'CR',
     siteId: '',
     userRoleId: userRoleOptions[0]?.id ?? 'planner',
+    consequence: 'Unknown',
+    immediateAction: '',
+    constraints: [],
+    workRequired: 'Unknown',
   });
   const [error, setError] = useState<string | null>(null);
 
   function updateField<TField extends keyof EntranceValues>(field: TField, value: EntranceValues[TField]) {
     setValues((current) => ({ ...current, [field]: value }));
+    setError(null);
+  }
+
+  function toggleConstraint(constraint: string) {
+    setValues((current) => ({
+      ...current,
+      constraints: current.constraints.includes(constraint)
+        ? current.constraints.filter((item) => item !== constraint)
+        : [...current.constraints, constraint],
+    }));
     setError(null);
   }
 
@@ -46,26 +64,26 @@ export function EntranceScreen({
             <Icon className="h-5 w-5" name="logo" />
           </span>
           <div>
-            <p className="text-lg font-bold leading-5">CR Planning Companion</p>
+            <p className="text-lg font-bold leading-5">SNC CR Planning Companion</p>
             <p className="text-sm font-semibold text-app-muted">Demo-safe screening and planning workflow</p>
           </div>
         </header>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(20rem,0.95fr)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.08fr)_minmax(20rem,0.92fr)]">
           <section className="panel p-5 sm:p-6" aria-labelledby="entrance-heading">
             <div className="border-b border-app-line pb-4">
               <h1 className="text-2xl font-bold tracking-normal text-app-navy" id="entrance-heading">
-                Select site and source record
+                Select SNC site and source record
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-app-muted">
-                Start from a CR, existing WO, PM package, or short condition note. The agent output is generated once and shown as read-only planning context.
+                Start from a CR, existing WO, PM package, or short condition note. The agent output is generated once as read-only planning context.
               </p>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <label className="block">
                 <span className="field-label">Site</span>
-                <select className="field mt-2" onChange={(event) => updateField('siteId', event.target.value)} value={values.siteId}>
+                <select aria-label="Site" className="field mt-2" onChange={(event) => updateField('siteId', event.target.value)} value={values.siteId}>
                   <option value="">Select a site</option>
                   {siteOptions.map((site) => (
                     <option key={site.id} value={site.id}>
@@ -73,6 +91,9 @@ export function EntranceScreen({
                     </option>
                   ))}
                 </select>
+                <span className="mt-2 block min-h-10 text-xs leading-5 text-app-muted">
+                  {values.siteId ? siteOptions.find((site) => site.id === values.siteId)?.description : 'Fleet-aware demo context only.'}
+                </span>
               </label>
 
               <label className="block">
@@ -113,6 +134,30 @@ export function EntranceScreen({
               </div>
             </fieldset>
 
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <label className="block">
+                <span className="field-label">Work-needed marker</span>
+                <select
+                  className="field mt-2"
+                  onChange={(event) => updateField('workRequired', event.target.value as WorkRequired)}
+                  value={values.workRequired}
+                >
+                  {workRequiredOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="field-label">Potential consequence</span>
+                <select className="field mt-2" onChange={(event) => updateField('consequence', event.target.value)} value={values.consequence}>
+                  {consequenceOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
             <label className="mt-5 block">
               <span className="field-label">CR, WO, PM, or condition note</span>
               <textarea
@@ -124,13 +169,45 @@ export function EntranceScreen({
               />
             </label>
 
+            <label className="mt-4 block">
+              <span className="field-label">Immediate action taken</span>
+              <input
+                className="field mt-2"
+                onChange={(event) => updateField('immediateAction', event.target.value)}
+                placeholder="Example: entered notification, tagged for planner review, none known"
+                value={values.immediateAction}
+              />
+            </label>
+
+            <fieldset className="mt-4">
+              <legend className="field-label">Known planning constraints</legend>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {planningConstraintOptions.map((constraint) => {
+                  const checked = values.constraints.includes(constraint);
+                  return (
+                    <label
+                      className={
+                        checked
+                          ? 'flex min-h-10 items-center gap-2 rounded-lg border border-app-purple bg-app-purpleSoft px-3 text-sm font-bold text-app-purple'
+                          : 'flex min-h-10 items-center gap-2 rounded-lg border border-app-line bg-white px-3 text-sm font-semibold text-app-navy hover:border-app-purple/40'
+                      }
+                      key={constraint}
+                    >
+                      <input checked={checked} className="h-4 w-4 accent-app-purple" onChange={() => toggleConstraint(constraint)} type="checkbox" />
+                      <span>{constraint}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+
             <div className="mt-3 flex flex-wrap gap-2" aria-label="Demo input shortcuts">
               {demoInputs.map((item) => (
                 <button
                   className="rounded-lg border border-app-line bg-white px-3 py-2 text-xs font-bold text-app-purple shadow-sm hover:bg-app-purpleSoft"
                   key={item.input}
                   onClick={() => {
-                    setValues((current) => ({ ...current, input: item.input, recordType: item.recordType }));
+                    setValues((current) => ({ ...current, input: item.input, recordType: item.recordType, siteId: item.siteId }));
                     setError(null);
                   }}
                   type="button"
@@ -160,14 +237,14 @@ export function EntranceScreen({
             <div className="flex items-center gap-2">
               <Icon className="h-5 w-5 text-app-purple" name="shield" />
               <h2 className="text-lg font-bold text-app-navy" id="agent-guardrails-heading">
-                Controlled agent run
+                Planner guardrails
               </h2>
             </div>
             <div className="mt-4 space-y-3">
               {[
                 'One intake action starts the mock Databricks review.',
                 'No chat prompt is available after the run.',
-                'Planner gaps and search findings are read-only.',
+                'Planner gaps and evidence matches are read-only.',
                 'Technical criteria must come from approved source documents.',
               ].map((item) => (
                 <div className="flex gap-3 rounded-lg border border-app-line bg-app-soft/40 p-3" key={item}>
@@ -179,11 +256,11 @@ export function EntranceScreen({
               ))}
             </div>
             <div className="mt-5 rounded-lg border border-app-line bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-app-muted">Expected output</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-app-muted">Readiness output</p>
               <dl className="mt-3 grid gap-3 text-sm">
                 <div className="grid grid-cols-[8rem_1fr] gap-3">
                   <dt className="font-semibold text-app-muted">CR review</dt>
-                  <dd className="font-bold text-app-navy">Classification, related records, planner gaps</dd>
+                  <dd className="font-bold text-app-navy">CR-to-WO path, related records, planner gaps</dd>
                 </div>
                 <div className="grid grid-cols-[8rem_1fr] gap-3">
                   <dt className="font-semibold text-app-muted">WO or PM</dt>
@@ -191,7 +268,11 @@ export function EntranceScreen({
                 </div>
                 <div className="grid grid-cols-[8rem_1fr] gap-3">
                   <dt className="font-semibold text-app-muted">Searches</dt>
-                  <dd className="font-bold text-app-navy">Mock vector and data-search matches only</dd>
+                  <dd className="font-bold text-app-navy">Mock vector, data-search, and audit matches only</dd>
+                </div>
+                <div className="grid grid-cols-[8rem_1fr] gap-3">
+                  <dt className="font-semibold text-app-muted">Handoff</dt>
+                  <dd className="font-bold text-app-navy">Owner, due action, readiness, and review packet cues</dd>
                 </div>
               </dl>
             </div>
