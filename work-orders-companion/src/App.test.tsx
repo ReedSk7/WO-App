@@ -3,30 +3,56 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import App from './App';
 
-describe('Work Orders Companion', () => {
-  it('updates the details panel when a work request row is selected', async () => {
+async function startDashboard(input = 'DEMO-CR-1001') {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await user.selectOptions(screen.getByRole('combobox', { name: /^Site$/i }), 'SITE-A');
+  await user.type(screen.getByLabelText(/CR, WO, PM, or condition note/i), input);
+  await user.click(screen.getByRole('button', { name: /Analyze record/i }));
+
+  return user;
+}
+
+describe('CR Planning Companion', () => {
+  it('requires controlled entrance values before opening the dashboard', async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole('heading', { name: /WR Details - WR-2026-0412/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Select site and source record/i })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /Select WR-2026-0398/i }));
+    await user.click(screen.getByRole('button', { name: /Analyze record/i }));
 
-    expect(screen.getByRole('heading', { name: /WR Details - WR-2026-0398/i })).toBeInTheDocument();
-    expect(screen.getByText(/Missed milestone on PM activity/i)).toBeInTheDocument();
-    expect(screen.getByText(/Recommended type DL - Delinquent Maintenance/i)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/Select a site/i);
   });
 
-  it('adds a local demo work request from the Add WR flow', async () => {
-    const user = userEvent.setup();
-    render(<App />);
+  it('opens the CR dashboard and avoids old WR terminology', async () => {
+    await startDashboard();
 
-    await user.click(screen.getByRole('button', { name: /Add WR/i }));
+    expect(screen.getByRole('heading', { name: /CR Details - DEMO-CR-1001/i })).toBeInTheDocument();
+    expect(screen.getByText(/Databricks Agent Output/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\bWR\b/)).not.toBeInTheDocument();
+  });
+
+  it('updates the details panel when a source record row is selected', async () => {
+    const user = await startDashboard();
+
+    await user.click(screen.getByRole('button', { name: /Select DEMO-PM-2001/i }));
+
+    expect(screen.getByRole('heading', { name: /PM Planning Record - DEMO-PM-2001/i })).toBeInTheDocument();
+    expect(screen.getByText(/Missed milestone on preventive maintenance activity/i)).toBeInTheDocument();
+    expect(screen.getByText(/Recommended WO type DL - Delinquent Maintenance/i)).toBeInTheDocument();
+  });
+
+  it('adds a local demo condition report from the Add CR flow', async () => {
+    const user = await startDashboard();
+
+    await user.click(screen.getByRole('button', { name: /Add CR/i }));
     await user.clear(screen.getByLabelText(/Description/i));
     await user.type(screen.getByLabelText(/Description/i), 'Demo breaker cabinet inspection note');
-    await user.click(screen.getByRole('button', { name: /Add demo WR/i }));
+    await user.click(screen.getByRole('button', { name: /Add demo CR/i }));
 
-    expect(screen.getByRole('heading', { name: /WR Details - WR-2026-0436/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /CR Details - DEMO-CR-0436/i })).toBeInTheDocument();
     expect(screen.getAllByText(/Demo breaker cabinet inspection note/i).length).toBeGreaterThan(0);
   });
 });

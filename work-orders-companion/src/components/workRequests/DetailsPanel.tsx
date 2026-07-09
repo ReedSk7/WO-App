@@ -1,4 +1,4 @@
-import type { EditableClassificationField, WorkRequest } from '../../types';
+import type { ConditionRecord, EditableClassificationField } from '../../types';
 import { cn } from '../../utils/cn';
 import { CriticalityBadge, StatusBadge } from '../ui/Badge';
 import { Button } from '../ui/Button';
@@ -48,10 +48,10 @@ function RecommendationSelect({
 }
 
 function ClassificationPanel({
-  request,
+  record,
   onClassificationChange,
 }: {
-  request: WorkRequest;
+  record: ConditionRecord;
   onClassificationChange: (field: EditableClassificationField, value: string) => void;
 }) {
   return (
@@ -63,34 +63,34 @@ function ClassificationPanel({
         </div>
         <div className="space-y-3">
           <RecommendationSelect
-            label="WO Type"
+            label="Rec. WO Type"
             onChange={(value) => onClassificationChange('woType', value)}
             options={recommendationOptions.woType}
-            value={request.classification.woType}
+            value={record.classification.woType}
           />
           <RecommendationSelect
             label="Criticality"
             onChange={(value) => onClassificationChange('criticality', value)}
             options={recommendationOptions.criticality}
-            value={request.classification.criticality}
+            value={record.classification.criticality}
           />
           <RecommendationSelect
             label="Priority"
             onChange={(value) => onClassificationChange('priority', value)}
             options={recommendationOptions.priority}
-            value={request.classification.priority}
+            value={record.classification.priority}
           />
           <div className="grid grid-cols-[5.5rem_1fr] items-center gap-3">
             <span className="text-sm font-semibold text-app-muted">Confidence</span>
             <div className="flex items-center gap-3">
-              <span className="w-10 text-sm font-bold text-app-navy">{request.classification.confidence}%</span>
-              <ProgressBar value={request.classification.confidence} />
+              <span className="w-10 text-sm font-bold text-app-navy">{record.classification.confidence}%</span>
+              <ProgressBar value={record.classification.confidence} />
             </div>
           </div>
         </div>
         <div className="mt-3 border-t border-app-line pt-3">
           <p className="text-xs font-bold uppercase tracking-wide text-app-muted">Rationale</p>
-          <p className="mt-2 text-sm leading-5 text-app-navy">{request.classification.rationale}</p>
+          <p className="mt-2 text-sm leading-5 text-app-navy">{record.classification.rationale}</p>
         </div>
       </section>
 
@@ -106,7 +106,7 @@ function ClassificationPanel({
           </Button>
         </div>
         <div className="space-y-2.5">
-          {request.references.map((reference) => (
+          {record.references.map((reference) => (
             <div className="grid grid-cols-[1fr_auto] gap-3 text-sm" key={reference.id}>
               <div className="min-w-0">
                 <p className="truncate font-mono text-xs font-bold text-app-navy">{reference.id}</p>
@@ -133,7 +133,7 @@ function ClassificationPanel({
           </Button>
         </div>
         <ul className="space-y-2.5 text-sm text-app-navy">
-          {request.keyFactors.map((factor) => (
+          {record.keyFactors.map((factor) => (
             <li className="flex gap-2" key={factor}>
               <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-app-green/30 bg-app-greenSoft text-app-green">
                 <Icon className="h-3 w-3" name="check" />
@@ -147,17 +147,55 @@ function ClassificationPanel({
   );
 }
 
-function PlaceholderTab({ activeTab, request }: { activeTab: DetailTab; request: WorkRequest }) {
+function AgentOutputPanel({ record }: { record: ConditionRecord }) {
+  const sections = [
+    { title: 'Known Conditions', items: record.agentReview.knownConditions },
+    { title: 'Planner Gaps', items: record.agentReview.plannerGaps },
+    { title: 'Data Search Findings', items: record.agentReview.dataSearchFindings },
+    { title: 'Next Planner Checks', items: record.agentReview.nextPlannerChecks },
+  ];
+
+  return (
+    <section className="panel p-4" aria-labelledby="agent-output-heading">
+      <div className="flex flex-col gap-2 border-b border-app-line pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-app-purple" name="spark" />
+          <h3 className="text-sm font-bold text-app-navy" id="agent-output-heading">
+            Databricks Agent Output
+          </h3>
+        </div>
+        <span className="badge border-app-blue/25 bg-app-blueSoft text-app-blue">Read only</span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        {sections.map((section) => (
+          <article className="rounded-lg border border-app-line bg-app-soft/40 p-3" key={section.title}>
+            <h4 className="text-xs font-bold uppercase tracking-wide text-app-muted">{section.title}</h4>
+            <ul className="mt-2 space-y-2 text-sm leading-5 text-app-navy">
+              {section.items.map((item) => (
+                <li className="flex gap-2" key={item}>
+                  <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-app-purple" />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PlaceholderTab({ activeTab, record }: { activeTab: DetailTab; record: ConditionRecord }) {
   const content: Record<Exclude<DetailTab, 'Classification'>, string[]> = {
-    'Related Records': request.references.map((reference) => `${reference.id} - ${reference.title}`),
+    'Related Records': record.references.map((reference) => `${reference.id} - ${reference.title}`),
     'Risk & Mitigation': [
       'Confirm source documents before routing.',
       'Do not infer technical acceptance criteria from mock data.',
       'Planner verification required before work package use.',
     ],
-    'Screening Actions': ['Assign owner', 'Confirm classification', 'Disposition related records', 'Route to planning when complete'],
-    Notes: ['Demo note: screening record is local-only and not connected to Maximo.'],
-    History: ['Created in demo screening queue', 'Mock AI recommendation generated', 'Awaiting planner review'],
+    'Screening Actions': ['Assign owner', 'Confirm CR classification', 'Disposition related records', 'Route to planning when complete'],
+    Notes: ['Demo note: source record is local-only and not connected to Maximo.'],
+    History: ['Created in demo screening queue', 'Mock Databricks agent output generated', 'Awaiting planner review'],
   };
 
   return (
@@ -177,28 +215,31 @@ function PlaceholderTab({ activeTab, request }: { activeTab: DetailTab; request:
 
 export function DetailsPanel({
   activeTab,
-  request,
+  record,
   onClassificationChange,
   onExport,
   onMoveToPlanning,
   onTabChange,
 }: {
   activeTab: DetailTab;
-  request: WorkRequest;
+  record: ConditionRecord;
   onClassificationChange: (field: EditableClassificationField, value: string) => void;
   onExport: () => void;
   onMoveToPlanning: () => void;
   onTabChange: (tab: DetailTab) => void;
 }) {
+  const heading = record.recordType === 'CR' ? `CR Details - ${record.recordNumber}` : `${record.recordType} Planning Record - ${record.recordNumber}`;
+  const numberLabel = record.recordType === 'CR' ? 'CR Number' : 'Source Record';
+
   return (
-    <section aria-labelledby="wr-details-heading" className="space-y-4">
+    <section aria-labelledby="cr-details-heading" className="space-y-4">
       <div className="panel p-3">
         <div className="flex flex-col gap-2 border-b border-app-line pb-2 lg:flex-row lg:items-start lg:justify-between">
           <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-lg font-bold text-app-navy" id="wr-details-heading">
-              WR Details - {request.ticketNumber}
+            <h2 className="text-lg font-bold text-app-navy" id="cr-details-heading">
+              {heading}
             </h2>
-            <span className="badge border-app-green/25 bg-app-greenSoft text-app-green">{request.percentComplete}% complete</span>
+            <span className="badge border-app-green/25 bg-app-greenSoft text-app-green">{record.percentComplete}% complete</span>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button className="min-h-9 px-3 py-1.5 text-xs" onClick={onExport}>
@@ -207,28 +248,28 @@ export function DetailsPanel({
             </Button>
             <Button className="min-h-9 px-3 py-1.5 text-xs" onClick={onMoveToPlanning} variant="primary">
               <Icon className="h-4 w-4" name="arrow" />
-              Move to Planning
+              Route to Planning
             </Button>
           </div>
         </div>
 
         <dl className="grid gap-x-8 gap-y-2 py-2 sm:grid-cols-2 xl:grid-cols-4">
-          <MetaItem label="Ticket Number" value={request.ticketNumber} />
-          <MetaItem label="Site ID" value={request.siteId} />
-          <MetaItem label="Location" value={request.location} />
+          <MetaItem label={numberLabel} value={record.recordNumber} />
+          <MetaItem label="Site ID" value={record.siteId} />
+          <MetaItem label="Location" value={record.location} />
           <div>
             <dt className="text-[0.7rem] font-semibold text-app-muted">Status</dt>
             <dd className="mt-1">
-              <StatusBadge status={request.status} />
+              <StatusBadge status={record.status} />
             </dd>
           </div>
-          <MetaItem label="Date" value={request.date} />
-          <MetaItem label="Ticket ID" value={request.ticketId} />
-          <MetaItem label="Asset Number" value={request.assetNumber} />
-          <MetaItem label="Owner" value={request.owner} />
+          <MetaItem label="Date" value={record.date} />
+          <MetaItem label="Record ID" value={record.recordId} />
+          <MetaItem label="Asset Number" value={record.assetNumber} />
+          <MetaItem label="Owner" value={record.owner} />
           <div className="sm:col-span-2 xl:col-span-4">
             <dt className="text-[0.7rem] font-semibold text-app-muted">Description</dt>
-            <dd className="line-clamp-2 mt-1 max-w-5xl text-xs font-medium leading-5 text-app-navy">{request.detailDescription}</dd>
+            <dd className="line-clamp-2 mt-1 max-w-5xl text-xs font-medium leading-5 text-app-navy">{record.detailDescription}</dd>
           </div>
         </dl>
       </div>
@@ -255,9 +296,12 @@ export function DetailsPanel({
       </div>
 
       {activeTab === 'Classification' ? (
-        <ClassificationPanel onClassificationChange={onClassificationChange} request={request} />
+        <>
+          <ClassificationPanel onClassificationChange={onClassificationChange} record={record} />
+          <AgentOutputPanel record={record} />
+        </>
       ) : (
-        <PlaceholderTab activeTab={activeTab} request={request} />
+        <PlaceholderTab activeTab={activeTab} record={record} />
       )}
     </section>
   );

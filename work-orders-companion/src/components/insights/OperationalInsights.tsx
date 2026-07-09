@@ -1,4 +1,4 @@
-import type { OperationalInsight, WorkRequest } from '../../types';
+import type { ConditionRecord, OperationalInsight } from '../../types';
 import { ToneBadge } from '../ui/Badge';
 import { Icon, type IconName } from '../ui/Icon';
 import { ProgressBar } from '../ui/ProgressBar';
@@ -17,7 +17,7 @@ function confidenceFromMetrics(insight: OperationalInsight) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function OperationalInsights({ request }: { request: WorkRequest }) {
+export function OperationalInsights({ record }: { record: ConditionRecord }) {
   return (
     <aside className="space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto" aria-labelledby="operational-insights-heading">
       <div className="flex items-start justify-between gap-4">
@@ -29,7 +29,7 @@ export function OperationalInsights({ request }: { request: WorkRequest }) {
             <h2 className="text-lg font-bold text-app-navy" id="operational-insights-heading">
               Operational Insights
             </h2>
-            <p className="mt-1 text-xs font-semibold text-app-muted">Insights for {request.ticketNumber}</p>
+            <p className="mt-1 text-xs font-semibold text-app-muted">Insights for {record.recordNumber}</p>
           </div>
         </div>
         <button className="rounded-lg p-2 text-app-muted hover:bg-app-soft hover:text-app-navy" aria-label="Close insights panel" type="button">
@@ -37,7 +37,7 @@ export function OperationalInsights({ request }: { request: WorkRequest }) {
         </button>
       </div>
 
-      {request.insights.map((insight, index) => {
+      {record.insights.map((insight, index) => {
         const confidence = confidenceFromMetrics(insight);
         return (
           <article className="panel p-3" key={insight.id}>

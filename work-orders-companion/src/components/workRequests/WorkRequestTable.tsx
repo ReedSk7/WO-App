@@ -1,26 +1,26 @@
-import type { WorkRequest, WorkRequestStatus } from '../../types';
+import type { ConditionRecord } from '../../types';
 import { cn } from '../../utils/cn';
-import { CriticalityBadge, StatusBadge } from '../ui/Badge';
+import { CriticalityBadge, RecordTypeBadge, StatusBadge } from '../ui/Badge';
 import { ProgressBar } from '../ui/ProgressBar';
 
-const columns = ['Ticket Number', 'Description', 'Location', 'Status', 'WO Type', 'Criticality', 'Priority', '% Complete', 'Owner'];
+const columns = ['CR Number', 'Description', 'Location', 'Status', 'WO Type', 'Criticality', 'Priority', '% Complete', 'Owner'];
 
-export function WorkRequestTable({
-  selectedTicket,
-  workRequests,
+export function ConditionRecordTable({
+  selectedRecordNumber,
+  records,
   onSelect,
 }: {
-  selectedTicket: string;
-  workRequests: WorkRequest[];
-  onSelect: (ticketNumber: string) => void;
+  selectedRecordNumber: string;
+  records: ConditionRecord[];
+  onSelect: (recordNumber: string) => void;
 }) {
   return (
-    <section className="panel overflow-hidden" aria-labelledby="work-requests-heading">
+    <section className="panel overflow-hidden" aria-labelledby="condition-reports-heading">
       <div className="overflow-x-auto">
         <table className="min-w-[62rem] w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-app-line bg-white">
-              <th className="w-10 px-3 py-2 text-xs font-bold text-app-muted" aria-label="Selected request" />
+              <th className="w-10 px-3 py-2 text-xs font-bold text-app-muted" aria-label="Selected record" />
               {columns.map((column) => (
                 <th className="px-3 py-2 text-xs font-bold text-app-muted" key={column}>
                   <span className="inline-flex items-center gap-1">
@@ -34,20 +34,20 @@ export function WorkRequestTable({
             </tr>
           </thead>
           <tbody>
-            {workRequests.map((request) => {
-              const selected = request.ticketNumber === selectedTicket;
+            {records.map((record) => {
+              const selected = record.recordNumber === selectedRecordNumber;
               return (
                 <tr
                   className={cn(
                     'group cursor-pointer border-b border-app-line transition last:border-b-0 hover:bg-app-purpleSoft/45',
                     selected && 'bg-app-purpleSoft/65 shadow-[inset_3px_0_0_#5138b9]',
                   )}
-                  key={request.ticketNumber}
-                  onClick={() => onSelect(request.ticketNumber)}
+                  key={record.recordNumber}
+                  onClick={() => onSelect(record.recordNumber)}
                 >
                   <td className="px-3 py-2">
                     <button
-                      aria-label={`Select ${request.ticketNumber}`}
+                      aria-label={`Select ${record.recordNumber}`}
                       aria-pressed={selected}
                       className={cn(
                         'flex h-5 w-5 items-center justify-center rounded-full border text-[0.55rem] font-bold transition',
@@ -55,33 +55,38 @@ export function WorkRequestTable({
                       )}
                       onClick={(event) => {
                         event.stopPropagation();
-                        onSelect(request.ticketNumber);
+                        onSelect(record.recordNumber);
                       }}
                       type="button"
                     >
                       {selected ? <span className="h-1.5 w-1.5 rounded-full bg-current" /> : null}
                     </button>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-app-navy">{request.ticketNumber}</td>
-                  <td className="max-w-60 px-3 py-2 text-xs font-semibold leading-4 text-app-navy">
-                    <span className="line-clamp-2">{request.description}</span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-app-navy">{request.location}</td>
                   <td className="whitespace-nowrap px-3 py-2">
-                    <StatusBadge status={request.status as WorkRequestStatus} />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{request.woType}</td>
-                  <td className="whitespace-nowrap px-3 py-2">
-                    <CriticalityBadge value={request.criticality} />
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{request.priority}</td>
-                  <td className="w-28 whitespace-nowrap px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <span className="w-9 text-xs font-semibold text-app-navy">{request.percentComplete}%</span>
-                      <ProgressBar value={request.percentComplete} />
+                      <span className="font-mono text-xs font-semibold text-app-navy">{record.recordNumber}</span>
+                      <RecordTypeBadge recordType={record.recordType} />
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{request.owner}</td>
+                  <td className="max-w-60 px-3 py-2 text-xs font-semibold leading-4 text-app-navy">
+                    <span className="line-clamp-2">{record.description}</span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs font-semibold text-app-navy">{record.location}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <StatusBadge status={record.status} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.woType}</td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <CriticalityBadge value={record.criticality} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.priority}</td>
+                  <td className="w-28 whitespace-nowrap px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-9 text-xs font-semibold text-app-navy">{record.percentComplete}%</span>
+                      <ProgressBar value={record.percentComplete} />
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs font-bold text-app-navy">{record.owner}</td>
                 </tr>
               );
             })}

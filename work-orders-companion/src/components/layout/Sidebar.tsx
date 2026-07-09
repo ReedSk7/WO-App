@@ -25,7 +25,7 @@ const primaryItems: NavItem[] = [
   { label: 'Admin', icon: 'admin' },
 ];
 
-export function Sidebar() {
+export function Sidebar({ userRoleLabel = 'Planner' }: { userRoleLabel?: string }) {
   return (
     <aside className="hidden border-r border-app-line bg-app-rail lg:sticky lg:top-0 lg:block lg:h-screen">
       <div className="flex h-full min-h-0 flex-col">
@@ -34,7 +34,7 @@ export function Sidebar() {
             <Icon className="h-5 w-5" name="logo" />
           </span>
           <div>
-            <p className="text-base font-bold leading-5 text-app-navy">Work Orders</p>
+            <p className="text-base font-bold leading-5 text-app-navy">CR Planning</p>
             <p className="text-base font-bold leading-5 text-app-navy">Companion</p>
           </div>
         </div>
@@ -79,10 +79,10 @@ export function Sidebar() {
 
         <div className="border-t border-app-line p-4">
           <div className="flex items-center gap-3 rounded-lg border border-app-line bg-white p-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-app-purple text-sm font-bold text-white">JD</span>
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-app-purple text-sm font-bold text-white">DU</span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-app-navy">Jane Doe</p>
-              <p className="text-xs text-app-muted">Planner</p>
+              <p className="truncate text-sm font-semibold text-app-navy">Demo User</p>
+              <p className="text-xs text-app-muted">{userRoleLabel}</p>
             </div>
           </div>
         </div>

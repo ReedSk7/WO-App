@@ -1,472 +1,434 @@
-import type { WorkRequest } from '../types';
+import type { AppSession, ConditionRecord, OperationalInsight, RecordType, SiteOption, UserRoleOption } from '../types';
 
-// TODO: Replace this mock data with governed Maximo/API data after backend, auth,
-// audit, and demo-data separation requirements are defined.
-export const mockWorkRequests: WorkRequest[] = [
-  {
-    ticketNumber: 'WR-2026-0412',
+export const siteOptions: SiteOption[] = [
+  { id: 'SITE-A', label: 'Demo Site A', description: 'Generic operating site for prototype review.' },
+  { id: 'SITE-B', label: 'Demo Site B', description: 'Generic maintenance planning site.' },
+  { id: 'SITE-C', label: 'Demo Site C', description: 'Generic outage and PM planning site.' },
+];
+
+export const userRoleOptions: UserRoleOption[] = [
+  { id: 'planner', label: 'Planner' },
+  { id: 'screening-reviewer', label: 'Screening Reviewer' },
+  { id: 'work-week-manager', label: 'Work Week Manager' },
+];
+
+export const recordTypeOptions: Array<{ value: RecordType; label: string; helper: string }> = [
+  { value: 'CR', label: 'Condition Report', helper: 'CR generated from Maximo condition documentation.' },
+  { value: 'WO', label: 'Work Order', helper: 'Existing WO that needs planner gap review.' },
+  { value: 'PM', label: 'Preventive Maintenance', helper: 'PM package needing planning support.' },
+];
+
+export const demoInputs: Array<{ input: string; recordType: RecordType; label: string }> = [
+  { input: 'DEMO-CR-1001', recordType: 'CR', label: 'Corrosion CR' },
+  { input: 'DEMO-WO-3001', recordType: 'WO', label: 'Existing WO' },
+  { input: 'DEMO-PM-2001', recordType: 'PM', label: 'PM package' },
+];
+
+const defaultAgentReview = {
+  knownConditions: [
+    'Source record text is available in the mock Maximo extract.',
+    'Asset and location metadata are present but require planner verification.',
+    'No procedure, torque, setpoint, or acceptance criteria are inferred by the prototype.',
+  ],
+  assumptions: [
+    'Planner will confirm source documents before using any generated package text.',
+    'Related-record matches are similarity examples only.',
+    'The demo does not disposition technical requirements.',
+  ],
+  nextPlannerChecks: [
+    'Confirm record scope and affected asset boundary.',
+    'Review related CR, WO, and PM history before packaging work.',
+    'Document unresolved gaps before routing to planning.',
+  ],
+};
+
+function makeInsights({
+  confidence,
+  criticality,
+  findings,
+  priority,
+  relatedCount,
+  summary,
+  tone,
+  type,
+}: {
+  confidence: number;
+  criticality: string;
+  findings: string[];
+  priority: string;
+  relatedCount: number;
+  summary: string;
+  tone: 'good' | 'medium' | 'high' | 'neutral';
+  type: string;
+}): OperationalInsight[] {
+  return [
+    {
+      id: 'classification',
+      title: 'Classification Summary',
+      status: tone === 'high' ? 'High' : tone === 'good' ? 'Good' : 'Medium',
+      tone,
+      summary: `Recommended WO type ${type}`,
+      metrics: [
+        { label: 'Criticality', value: criticality },
+        { label: 'Priority', value: priority },
+        { label: 'Confidence', value: `${confidence}%` },
+      ],
+      findings: ['Planner verification required before routing', ...findings],
+    },
+    {
+      id: 'related',
+      title: 'Related Records',
+      status: relatedCount >= 4 ? 'Good' : 'Medium',
+      tone: relatedCount >= 4 ? 'good' : 'medium',
+      summary: `${relatedCount} mock records matched in the review index`,
+      metrics: [
+        { label: 'Matched records', value: String(relatedCount) },
+        { label: 'Dispositioned', value: relatedCount > 3 ? '1 / 5' : '0 / 3' },
+      ],
+      findings: ['Review similar CR, WO, and PM history before package use'],
+    },
+    {
+      id: 'hre',
+      title: 'HRE Review',
+      status: tone === 'high' ? 'Medium' : 'Low',
+      tone: tone === 'high' ? 'medium' : 'neutral',
+      summary: 'Human reliability marker requires planner screening only',
+      metrics: [{ label: 'Open checks', value: tone === 'high' ? '2' : '1' }],
+      findings: ['Confirm field handoff and review requirements from approved sources'],
+    },
+    {
+      id: 'cspv',
+      title: 'CSPV Review',
+      status: tone === 'high' ? 'High' : 'Medium',
+      tone: tone === 'high' ? 'high' : 'medium',
+      summary: 'Comparable mock trend data found for review',
+      metrics: [{ label: 'Reference documents', value: relatedCount > 3 ? '3' : '1' }],
+      findings: ['Do not infer criteria from trend matches'],
+    },
+  ];
+}
+
+function record({
+  agentReview,
+  assetNumber,
+  classification,
+  date,
+  description,
+  detailDescription,
+  keyFactors,
+  location,
+  owner,
+  percentComplete,
+  priority,
+  recordId,
+  recordNumber,
+  recordType = 'CR',
+  references,
+  siteId,
+  status,
+  woType,
+}: Omit<ConditionRecord, 'aliases' | 'criticality' | 'insights'> & { aliases?: string[] }): ConditionRecord {
+  return {
+    recordNumber,
+    aliases: [recordNumber, recordNumber.replace(/-/g, ''), ...(recordType === 'CR' ? [recordNumber.replace('DEMO-', '')] : [])],
+    recordType,
+    description,
+    location,
+    status,
+    woType,
+    criticality: classification.criticality,
+    priority,
+    percentComplete,
+    owner,
+    siteId,
+    date,
+    recordId,
+    assetNumber,
+    detailDescription,
+    classification,
+    references,
+    keyFactors,
+    insights: makeInsights({
+      confidence: classification.confidence,
+      criticality: classification.criticality,
+      findings: keyFactors.slice(0, 2),
+      priority: classification.priority,
+      relatedCount: references.length,
+      summary: description,
+      tone: classification.criticality === 'Crit Cat 1' ? 'high' : 'medium',
+      type: classification.woType,
+    }),
+    agentReview,
+  };
+}
+
+// TODO: Replace this mock data with governed Maximo, Databricks vector-search,
+// and approved data-search outputs after backend, auth, and audit requirements are defined.
+export const mockConditionRecords: ConditionRecord[] = [
+  record({
+    recordNumber: 'DEMO-CR-1001',
+    recordType: 'CR',
     description: 'Corroded pipe fitting identified during routine walkdown',
     location: 'AREA-A-PUMP-01',
     status: 'REVIEW',
     woType: 'DN',
-    criticality: 'Crit Cat 2',
     priority: 3,
     percentComplete: 15,
-    owner: 'M. Torres',
+    owner: 'Demo Planner',
     siteId: 'SITE-A',
     date: 'May 15, 2026',
-    ticketId: 'TID-8F3J2C',
-    assetNumber: 'AST-38-007',
+    recordId: 'RID-8F3J2C',
+    assetNumber: 'AST-DEMO-007',
     detailDescription:
-      'Corroded pipe fitting identified on a generic cooling loop during routine walkdown. Visible pitting and wall thinning were observed on the downstream elbow section. Engineering evaluation is pending before work scope is finalized.',
+      'A condition report documents visible corrosion on a generic pipe fitting. Planner review is needed to determine whether a corrective work order is required and which source documents govern the work scope.',
     classification: {
       woType: 'DN - Deficient Maintenance',
       criticality: 'Crit Cat 2',
       priority: '3 - Moderate',
       confidence: 82,
       rationale:
-        'Assigned moderate classification because the condition is observable, bounded to a generic location, and requires planner verification before routing.',
+        'Recommended as deficient maintenance because the CR describes an observable equipment condition that may require corrective work after planner verification.',
     },
     references: [
-      { id: 'WR-2024-0215', title: 'Leak on AREA-A-PUMP-01', similarity: 92 },
-      { id: 'WR-2025-1102', title: 'Corrosion on loop 3B elbow', similarity: 88 },
-      { id: 'WR-2023-0897', title: 'Piping corrosion - similar conditions', similarity: 85 },
-      { id: 'WR-2023-0118', title: 'Wall thinning on loop 3B', similarity: 78 },
-      { id: 'WR-2022-1209', title: 'Elbow corrosion - routine walkdown', similarity: 74 },
+      { id: 'DEMO-CR-0921', title: 'Leak on generic pump support piping', similarity: 92 },
+      { id: 'DEMO-WO-2214', title: 'Prior corrosion walkdown package', similarity: 88 },
+      { id: 'DEMO-CR-0887', title: 'Similar pitting condition report', similarity: 85 },
+      { id: 'DEMO-PM-1440', title: 'Routine inspection follow-up', similarity: 78 },
     ],
     keyFactors: [
-      'Equipment match (AST-38-007)',
-      'Description similarity (88%)',
-      'Location match (AREA-A-PUMP-01)',
-      'Recent similar issues found',
-      'Routine inspection source',
-      'No immediate safety impact identified',
+      'Equipment match in mock asset index',
+      'Description similarity from vector search',
+      'Location match in Maximo-style data',
+      'Recent similar CR history found',
+      'Planner source-document verification required',
     ],
-    insights: [
-      {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Recommended type DN - Deficient Maintenance',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 2' },
-          { label: 'Priority', value: '3 - Moderate' },
-          { label: 'Confidence', value: '82%' },
-        ],
-        findings: ['Verify rationale before routing', 'Confirm owner before planning handoff'],
-      },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Good',
-        tone: 'good',
-        summary: 'Six mock records matched against generic screening history',
-        metrics: [
-          { label: 'Matched records', value: '6' },
-          { label: 'Dispositioned', value: '1 / 6' },
-        ],
-        findings: ['WR-2024-0215', 'WR-2023-0897'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Potential human reliability review marker found',
-        metrics: [{ label: 'Similar prior events', value: '2' }],
-        findings: ['Isolate affected generic system', 'Verify material condition', 'Monitor for degradation'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'High',
-        tone: 'high',
-        summary: 'CSPV marker needs planner verification',
-        metrics: [{ label: 'Reference documents', value: '3' }],
-        findings: ['Corrosion history in this generic area', 'Comparable prior findings exist', 'Schedule follow-up inspection'],
-      },
-    ],
-  },
-  {
-    ticketNumber: 'WR-2026-0398',
-    description: 'Missed milestone on PM activity',
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['Confirm whether a WO is required from the CR disposition.', 'Verify affected boundary and work package classification.'],
+      dataSearchFindings: ['Mock asset history contains prior corrosion terms.', 'No approved acceptance criteria are available in demo data.'],
+    },
+  }),
+  record({
+    recordNumber: 'DEMO-PM-2001',
+    recordType: 'PM',
+    description: 'Missed milestone on preventive maintenance activity',
     location: 'AREA-B-VALVE-12',
     status: 'OPEN',
     woType: 'DL',
-    criticality: 'Crit Cat 3',
     priority: 4,
     percentComplete: 0,
-    owner: 'J. Nakamura',
+    owner: 'Demo Scheduler',
     siteId: 'SITE-A',
     date: 'May 13, 2026',
-    ticketId: 'TID-1K7P9M',
-    assetNumber: 'VAL-12-441',
+    recordId: 'RID-1K7P9M',
+    assetNumber: 'VAL-DEMO-441',
     detailDescription:
-      'Preventive maintenance milestone was missed for a generic valve train. Screening should verify schedule impact, owner assignment, and whether related work can be consolidated before planning.',
+      'A preventive maintenance planning item has a schedule variance. The planner needs help identifying package gaps, related records, and required review actions before recovery planning.',
     classification: {
       woType: 'DL - Delinquent Maintenance',
       criticality: 'Crit Cat 3',
       priority: '4 - Routine',
       confidence: 76,
       rationale:
-        'Recommended as delinquent maintenance because the request centers on schedule recovery and work packaging rather than immediate equipment condition.',
+        'Recommended as delinquent maintenance because the source record centers on schedule recovery and package completeness rather than a new equipment condition.',
     },
     references: [
-      { id: 'WR-2024-0440', title: 'PM milestone recovery package', similarity: 86 },
-      { id: 'WR-2025-0302', title: 'Valve PM schedule review', similarity: 81 },
-      { id: 'WR-2023-0715', title: 'Calendar variance screening', similarity: 72 },
+      { id: 'DEMO-PM-1840', title: 'PM milestone recovery package', similarity: 86 },
+      { id: 'DEMO-WO-2202', title: 'Valve PM planning review', similarity: 81 },
+      { id: 'DEMO-CR-0715', title: 'Calendar variance screening note', similarity: 72 },
     ],
-    keyFactors: ['Schedule variance', 'Open owner action', 'Related PM package exists', 'No direct condition report text', 'Planning window available'],
-    insights: [
-      {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Recommended type DL - Delinquent Maintenance',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 3' },
-          { label: 'Priority', value: '4 - Routine' },
-          { label: 'Confidence', value: '76%' },
-        ],
-        findings: ['Confirm required schedule date', 'Review package consolidation opportunity'],
-      },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Good',
-        tone: 'good',
-        summary: 'Three mock schedule records matched',
-        metrics: [
-          { label: 'Matched records', value: '3' },
-          { label: 'Dispositioned', value: '0 / 3' },
-        ],
-        findings: ['WR-2024-0440', 'WR-2025-0302'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No elevated review marker identified',
-        metrics: [{ label: 'Open checks', value: '1' }],
-        findings: ['Confirm work window assumptions', 'Review handoff notes'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No CSPV risk marker in mock data',
-        metrics: [{ label: 'Reference documents', value: '1' }],
-        findings: ['No trend indicator found', 'Keep schedule recovery note attached'],
-      },
-    ],
-  },
-  {
-    ticketNumber: 'WR-2026-0385',
-    description: 'Failed containment bolting inspection',
+    keyFactors: ['Schedule variance', 'Open planner action', 'Related PM package exists', 'No direct CR condition text', 'Planning window available'],
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['Confirm required completion date.', 'Check whether related PM work can be bundled without changing scope.'],
+      dataSearchFindings: ['Mock schedule data contains a missed milestone marker.', 'Related work package history is present but not dispositioned.'],
+    },
+  }),
+  record({
+    recordNumber: 'DEMO-CR-1002',
+    recordType: 'CR',
+    description: 'Failed generic inspection result requires screening',
     location: 'AREA-C-TANK-04',
     status: 'REVIEW',
     woType: 'CC',
-    criticality: 'Crit Cat 1',
     priority: 1,
     percentComplete: 30,
-    owner: 'R. Patel',
+    owner: 'Demo Reviewer',
     siteId: 'SITE-B',
     date: 'May 10, 2026',
-    ticketId: 'TID-4C9L1Q',
-    assetNumber: 'TNK-04-204',
+    recordId: 'RID-4C9L1Q',
+    assetNumber: 'TNK-DEMO-204',
     detailDescription:
-      'Generic bolting inspection produced an unsatisfactory screening result. This mock request intentionally omits acceptance criteria and directs the planner to approved source documents.',
+      'A condition report was generated from a generic inspection result. The prototype intentionally omits acceptance criteria and directs the planner to approved source documents.',
     classification: {
       woType: 'CC - Corrective Condition',
       criticality: 'Crit Cat 1',
       priority: '1 - High',
       confidence: 89,
       rationale:
-        'Higher classification is recommended because the mock screening text indicates an inspection failure and requires source-document verification before planning.',
+        'Recommended as corrective condition because the CR includes inspection-failure language and needs controlled source-document review before planning.',
     },
     references: [
-      { id: 'WR-2025-0841', title: 'Bolting inspection follow-up', similarity: 91 },
-      { id: 'WR-2024-0610', title: 'Tank area corrective work', similarity: 84 },
-      { id: 'WR-2023-0772', title: 'Inspection documentation review', similarity: 79 },
+      { id: 'DEMO-CR-0841', title: 'Inspection follow-up condition report', similarity: 91 },
+      { id: 'DEMO-WO-2610', title: 'Corrective work package review', similarity: 84 },
+      { id: 'DEMO-CR-0772', title: 'Inspection documentation review', similarity: 79 },
     ],
     keyFactors: ['Inspection failure language', 'High priority marker', 'Source-document verification required', 'Mock area match', 'Owner assigned'],
-    insights: [
-      {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'High',
-        tone: 'high',
-        summary: 'Recommended type CC - Corrective Condition',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 1' },
-          { label: 'Priority', value: '1 - High' },
-          { label: 'Confidence', value: '89%' },
-        ],
-        findings: ['Planner review required before movement', 'Confirm approved inspection source'],
-      },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Three mock corrective work records matched',
-        metrics: [
-          { label: 'Matched records', value: '3' },
-          { label: 'Dispositioned', value: '1 / 3' },
-        ],
-        findings: ['WR-2025-0841', 'WR-2024-0610'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Review marker present due to inspection workflow',
-        metrics: [{ label: 'Open checks', value: '2' }],
-        findings: ['Check independent review need', 'Confirm communication handoff'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'High',
-        tone: 'high',
-        summary: 'Comparable inspection findings in mock history',
-        metrics: [{ label: 'Reference documents', value: '2' }],
-        findings: ['Prior corrective work exists', 'Do not infer acceptance criteria', 'Use approved source documents'],
-      },
-    ],
-  },
-  {
-    ticketNumber: 'WR-2026-0371',
-    description: 'Instrumentation calibration out of tolerance',
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['Identify controlling inspection source before planning.', 'Confirm required independent reviews before routing.'],
+      dataSearchFindings: ['Mock related records include prior corrective work.', 'Demo data cannot determine acceptance criteria.'],
+    },
+  }),
+  record({
+    recordNumber: 'DEMO-WO-3001',
+    recordType: 'WO',
+    description: 'Existing work order needs planner package gap review',
     location: 'AREA-D-INSTR-07',
     status: 'OPEN',
     woType: 'IM',
-    criticality: 'Crit Cat 3',
     priority: 4,
     percentComplete: 5,
-    owner: 'A. Chen',
+    owner: 'Demo Planner',
     siteId: 'SITE-C',
     date: 'May 08, 2026',
-    ticketId: 'TID-2A8R6S',
-    assetNumber: 'INS-07-118',
+    recordId: 'RID-2A8R6S',
+    assetNumber: 'INS-DEMO-118',
     detailDescription:
-      'Generic instrumentation calibration result is outside the expected administrative range. Planner should verify source records and determine whether a grouped calibration package is appropriate.',
+      'An existing work order needs a planning review. The agent output identifies missing package context, related mock records, and next planner checks without creating procedure content.',
     classification: {
       woType: 'IM - Instrument Maintenance',
       criticality: 'Crit Cat 3',
       priority: '4 - Routine',
       confidence: 71,
       rationale:
-        'Instrument maintenance classification is recommended because the mock request identifies calibration work and a defined instrument location.',
+        'Instrument maintenance is recommended because the source record identifies calibration-style work and a defined generic instrument location.',
     },
     references: [
-      { id: 'WR-2025-0907', title: 'Instrument calibration review', similarity: 82 },
-      { id: 'WR-2024-0165', title: 'Calibration grouping package', similarity: 77 },
+      { id: 'DEMO-WO-1907', title: 'Instrument calibration review', similarity: 82 },
+      { id: 'DEMO-PM-1165', title: 'Calibration grouping package', similarity: 77 },
     ],
-    keyFactors: ['Instrument location match', 'Calibration work language', 'Low completion progress', 'Potential grouping opportunity'],
-    insights: [
-      {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Recommended type IM - Instrument Maintenance',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 3' },
-          { label: 'Priority', value: '4 - Routine' },
-          { label: 'Confidence', value: '71%' },
-        ],
-        findings: ['Validate calibration record', 'Check grouping with related work'],
-      },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Good',
-        tone: 'good',
-        summary: 'Two mock calibration records matched',
-        metrics: [
-          { label: 'Matched records', value: '2' },
-          { label: 'Dispositioned', value: '0 / 2' },
-        ],
-        findings: ['WR-2025-0907', 'WR-2024-0165'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No elevated marker in mock screening',
-        metrics: [{ label: 'Open checks', value: '1' }],
-        findings: ['Confirm field labeling', 'Review turnover note'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No CSPV trend in mock references',
-        metrics: [{ label: 'Reference documents', value: '1' }],
-        findings: ['No repeated trend found', 'Keep source record attached'],
-      },
-    ],
-  },
-  {
-    ticketNumber: 'WR-2026-0362',
-    description: 'Leak observed at flange joint',
+    keyFactors: ['Instrument location match', 'Calibration work language', 'Low package progress', 'Potential grouping opportunity'],
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['Validate package scope against the current WO.', 'Check whether calibration work can be grouped with related records.'],
+      dataSearchFindings: ['Mock WO history includes calibration language.', 'No approved calibration limits are included in demo output.'],
+    },
+  }),
+  record({
+    recordNumber: 'DEMO-CR-1003',
+    recordType: 'CR',
+    description: 'Leak observed at generic flange joint',
     location: 'AREA-E-PIPE-15',
     status: 'NEW',
     woType: 'DN',
-    criticality: 'Crit Cat 2',
     priority: 2,
     percentComplete: 0,
-    owner: 'T. Wilson',
+    owner: 'Unassigned',
     siteId: 'SITE-C',
     date: 'May 06, 2026',
-    ticketId: 'TID-9N5V3H',
-    assetNumber: 'PIP-15-502',
+    recordId: 'RID-9N5V3H',
+    assetNumber: 'PIP-DEMO-502',
     detailDescription:
-      'Minor leakage observed at a generic flange joint. Work request is newly created and requires initial screening, classification confirmation, and related-record review.',
+      'A new condition report documents minor leakage at a generic flange joint. Screening must confirm owner assignment, classification, and whether WO generation is needed.',
     classification: {
       woType: 'DN - Deficient Maintenance',
       criticality: 'Crit Cat 2',
       priority: '2 - Elevated',
       confidence: 80,
       rationale:
-        'Deficient maintenance is recommended because the request describes an observed component condition requiring corrective planning.',
+        'Deficient maintenance is recommended because the CR describes an observed component condition that may require corrective planning.',
     },
     references: [
-      { id: 'WR-2025-1044', title: 'Flange leak screening package', similarity: 89 },
-      { id: 'WR-2023-0462', title: 'Pipe joint leak follow-up', similarity: 83 },
-      { id: 'WR-2022-0985', title: 'Gasket replacement planning', similarity: 73 },
+      { id: 'DEMO-CR-1044', title: 'Flange leak screening package', similarity: 89 },
+      { id: 'DEMO-WO-2462', title: 'Pipe joint leak follow-up', similarity: 83 },
+      { id: 'DEMO-CR-0985', title: 'Gasket replacement planning review', similarity: 73 },
     ],
-    keyFactors: ['Leak language match', 'Generic flange component', 'New request status', 'Similar work exists'],
-    insights: [
-      {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Recommended type DN - Deficient Maintenance',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 2' },
-          { label: 'Priority', value: '2 - Elevated' },
-          { label: 'Confidence', value: '80%' },
-        ],
-        findings: ['Assign screening owner', 'Confirm boundary assumptions with approved source'],
-      },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Good',
-        tone: 'good',
-        summary: 'Three mock flange records matched',
-        metrics: [
-          { label: 'Matched records', value: '3' },
-          { label: 'Dispositioned', value: '0 / 3' },
-        ],
-        findings: ['WR-2025-1044', 'WR-2023-0462'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Field execution marker needs review',
-        metrics: [{ label: 'Open checks', value: '2' }],
-        findings: ['Verify access constraints', 'Check turnover communication'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Similar component history exists in mock data',
-        metrics: [{ label: 'Reference documents', value: '2' }],
-        findings: ['Repeated leak terms found', 'Planner review required'],
-      },
-    ],
-  },
+    keyFactors: ['Leak language match', 'Generic flange component', 'New CR status', 'Similar work exists'],
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['Assign screening owner.', 'Confirm whether this CR should generate a corrective WO.'],
+      dataSearchFindings: ['Mock related records include repeated leak terminology.', 'No technical leakage threshold is inferred.'],
+    },
+  }),
 ];
 
-export function createMockWorkRequest(index: number): WorkRequest {
-  return {
-    ...mockWorkRequests[0],
-    ticketNumber: `WR-2026-04${30 + index}`,
-    description: 'New screening item from demo intake',
-    location: 'AREA-F-DEMO-02',
+function normalizeRecordNumber(input: string, recordType: RecordType) {
+  const cleaned = input.trim().toUpperCase();
+  const match = cleaned.match(/(?:DEMO-)?(?:CR|WO|PM|MPL)-?\d{3,5}/);
+  if (match) {
+    const normalized = match[0].replace(/^DEMO-?/, '').replace(/^(CR|WO|PM|MPL)(\d)/, '$1-$2');
+    const typeAdjusted = normalized.startsWith(recordType) ? normalized : `${recordType}-${normalized.replace(/^(CR|WO|PM|MPL)-?/, '')}`;
+    return `DEMO-${typeAdjusted}`;
+  }
+
+  return `DEMO-${recordType}-NEW`;
+}
+
+export function findRecordByInput(input: string, records: ConditionRecord[] = mockConditionRecords) {
+  const normalizedInput = input.trim().toUpperCase().replace(/\s+/g, ' ');
+  if (!normalizedInput) return undefined;
+
+  return records.find((candidate) =>
+    candidate.aliases.some((alias) => normalizedInput.includes(alias.toUpperCase()) || normalizedInput.includes(alias.toUpperCase().replace(/-/g, ''))),
+  );
+}
+
+export function createSessionConditionRecord(session: AppSession, index: number): ConditionRecord {
+  const recordNumber = normalizeRecordNumber(session.input, session.recordType);
+  const recordLabel = session.recordType === 'CR' ? 'condition report' : session.recordType === 'WO' ? 'work order' : 'PM package';
+
+  return record({
+    recordNumber,
+    recordType: session.recordType,
+    description: `Planner review generated from ${recordLabel} input`,
+    location: 'AREA-DEMO-INPUT',
     status: 'NEW',
     woType: 'UN',
-    criticality: 'Crit Cat 3',
     priority: 4,
     percentComplete: 0,
-    owner: 'Unassigned',
-    siteId: 'SITE-DEMO',
+    owner: session.userRoleLabel,
+    siteId: session.siteId,
     date: 'May 20, 2026',
-    ticketId: `TID-DEMO-${index}`,
-    assetNumber: 'AST-DEMO-002',
-    detailDescription:
-      'Demo-only work request created locally. Replace this path with governed intake and Maximo/API data after integration requirements are approved.',
+    recordId: `RID-DEMO-${index}`,
+    assetNumber: 'AST-DEMO-INPUT',
+    detailDescription: `Demo-only ${recordLabel} review created from controlled intake input: "${session.input.trim()}". Replace this path with governed Maximo and Databricks data before production use.`,
     classification: {
       woType: 'UN - Unclassified',
       criticality: 'Crit Cat 3',
       priority: '4 - Routine',
       confidence: 54,
-      rationale: 'New local demo item requires screening before routing.',
+      rationale: 'New local demo item requires planner verification before routing or work package use.',
     },
     references: [
-      { id: 'WR-DEMO-0101', title: 'Generic new intake comparison', similarity: 62 },
-      { id: 'WR-DEMO-0102', title: 'Screening placeholder reference', similarity: 58 },
+      { id: 'DEMO-CR-0101', title: 'Generic intake comparison', similarity: 62 },
+      { id: 'DEMO-WO-0102', title: 'Planning placeholder reference', similarity: 58 },
     ],
-    keyFactors: ['New intake item', 'Unassigned owner', 'Needs classification review', 'Mock record only'],
-    insights: [
+    keyFactors: ['Controlled intake item', 'No source system confirmation', 'Needs planner review', 'Mock record only'],
+    agentReview: {
+      ...defaultAgentReview,
+      plannerGaps: ['No matching fake source record was found.', 'Planner must confirm asset, scope, priority, and source documents.'],
+      dataSearchFindings: ['Input was captured locally only.', 'The demo cannot confirm current Maximo state.'],
+    },
+  });
+}
+
+export function createMockConditionRecord(index: number): ConditionRecord {
+  return {
+    ...createSessionConditionRecord(
       {
-        id: 'classification',
-        title: 'Classification Summary',
-        status: 'Medium',
-        tone: 'medium',
-        summary: 'Unclassified demo item needs review',
-        metrics: [
-          { label: 'Criticality', value: 'Crit Cat 3' },
-          { label: 'Priority', value: '4 - Routine' },
-          { label: 'Confidence', value: '54%' },
-        ],
-        findings: ['Assign owner', 'Complete screening classification'],
+        siteId: 'SITE-A',
+        siteLabel: 'Demo Site A',
+        userRoleId: 'screening-reviewer',
+        userRoleLabel: 'Screening Reviewer',
+        recordType: 'CR',
+        input: `DEMO-CR-04${30 + index}`,
+        startedAt: new Date().toISOString(),
       },
-      {
-        id: 'related',
-        title: 'Related Records',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'Two weak mock references found',
-        metrics: [
-          { label: 'Matched records', value: '2' },
-          { label: 'Dispositioned', value: '0 / 2' },
-        ],
-        findings: ['WR-DEMO-0101', 'WR-DEMO-0102'],
-      },
-      {
-        id: 'hre',
-        title: 'HRE Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No marker yet',
-        metrics: [{ label: 'Open checks', value: '1' }],
-        findings: ['Review after owner assignment'],
-      },
-      {
-        id: 'cspv',
-        title: 'CSPV Review',
-        status: 'Low',
-        tone: 'neutral',
-        summary: 'No marker yet',
-        metrics: [{ label: 'Reference documents', value: '0' }],
-        findings: ['No comparable trend identified'],
-      },
-    ],
+      index,
+    ),
+    description: 'New condition report from demo intake',
+    detailDescription:
+      'Demo-only condition report created locally. Replace this path with governed intake and Maximo/API data after integration requirements are approved.',
   };
 }

@@ -1,8 +1,31 @@
 export type WorkflowStep = 'Intake' | 'Screening' | 'Planning' | 'Scheduling' | 'Weekly Review' | 'Completion';
 
-export type WorkRequestStatus = 'REVIEW' | 'OPEN' | 'NEW' | 'PLANNING';
+export type RecordStatus = 'REVIEW' | 'OPEN' | 'NEW' | 'PLANNING';
+
+export type RecordType = 'CR' | 'WO' | 'PM';
 
 export type InsightTone = 'good' | 'medium' | 'high' | 'neutral';
+
+export type SiteOption = {
+  id: string;
+  label: string;
+  description: string;
+};
+
+export type UserRoleOption = {
+  id: string;
+  label: string;
+};
+
+export type AppSession = {
+  siteId: string;
+  siteLabel: string;
+  userRoleId: string;
+  userRoleLabel: string;
+  recordType: RecordType;
+  input: string;
+  startedAt: string;
+};
 
 export type ReferenceMatch = {
   id: string;
@@ -30,11 +53,21 @@ export type OperationalInsight = {
   findings: string[];
 };
 
-export type WorkRequest = {
-  ticketNumber: string;
+export type AgentReview = {
+  knownConditions: string[];
+  plannerGaps: string[];
+  dataSearchFindings: string[];
+  assumptions: string[];
+  nextPlannerChecks: string[];
+};
+
+export type ConditionRecord = {
+  recordNumber: string;
+  aliases: string[];
+  recordType: RecordType;
   description: string;
   location: string;
-  status: WorkRequestStatus;
+  status: RecordStatus;
   woType: string;
   criticality: string;
   priority: number;
@@ -42,12 +75,13 @@ export type WorkRequest = {
   owner: string;
   siteId: string;
   date: string;
-  ticketId: string;
+  recordId: string;
   assetNumber: string;
   detailDescription: string;
   classification: ClassificationRecommendation;
   references: ReferenceMatch[];
   keyFactors: string[];
   insights: OperationalInsight[];
+  agentReview: AgentReview;
   movedToPlanning?: boolean;
 };

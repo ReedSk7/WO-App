@@ -1,11 +1,17 @@
-import type { InsightTone, WorkRequestStatus } from '../../types';
+import type { InsightTone, RecordStatus, RecordType } from '../../types';
 import { cn } from '../../utils/cn';
 
-const statusStyles: Record<WorkRequestStatus, string> = {
+const statusStyles: Record<RecordStatus, string> = {
   REVIEW: 'border-app-green/25 bg-app-greenSoft text-app-green',
   OPEN: 'border-app-blue/25 bg-app-blueSoft text-app-blue',
   NEW: 'border-slate-300 bg-slate-100 text-slate-700',
   PLANNING: 'border-app-purple/25 bg-app-purpleSoft text-app-purple',
+};
+
+const recordTypeStyles: Record<RecordType, string> = {
+  CR: 'border-app-amber/25 bg-app-amberSoft text-app-amber',
+  WO: 'border-app-blue/25 bg-app-blueSoft text-app-blue',
+  PM: 'border-app-purple/25 bg-app-purpleSoft text-app-purple',
 };
 
 const toneStyles: Record<InsightTone, string> = {
@@ -21,7 +27,7 @@ function criticalityClass(criticality: string) {
   return 'border-app-amber/25 bg-[#fff8e6] text-app-amber';
 }
 
-export function StatusBadge({ status }: { status: WorkRequestStatus }) {
+export function StatusBadge({ status }: { status: RecordStatus }) {
   return <span className={cn('badge', statusStyles[status])}>{status}</span>;
 }
 
@@ -31,4 +37,8 @@ export function ToneBadge({ status, tone }: { status: string; tone: InsightTone 
 
 export function CriticalityBadge({ value }: { value: string }) {
   return <span className={cn('badge', criticalityClass(value))}>{value}</span>;
+}
+
+export function RecordTypeBadge({ recordType }: { recordType: RecordType }) {
+  return <span className={cn('badge px-2 py-0.5 text-[0.65rem]', recordTypeStyles[recordType])}>{recordType}</span>;
 }

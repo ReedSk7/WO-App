@@ -1,48 +1,65 @@
 import { useMemo, useState } from 'react';
-import { mockWorkRequests, createMockWorkRequest } from './data/mockWorkRequests';
-import type { EditableClassificationField, WorkRequest, WorkRequestStatus, WorkflowStep } from './types';
+import {
+  createMockConditionRecord,
+  createSessionConditionRecord,
+  findRecordByInput,
+  mockConditionRecords,
+  siteOptions,
+  userRoleOptions,
+} from './data/mockWorkRequests';
+import type { AppSession, ConditionRecord, EditableClassificationField, RecordStatus, WorkflowStep } from './types';
 import { downloadScreeningReport } from './utils/exportReport';
+import { EntranceScreen, type EntranceValues } from './components/entrance/EntranceScreen';
 import { Sidebar } from './components/layout/Sidebar';
 import { WorkflowTabs } from './components/layout/WorkflowTabs';
 import { OperationalInsights } from './components/insights/OperationalInsights';
 import { Icon } from './components/ui/Icon';
-import { AddWorkRequestModal, type AddWorkRequestValues } from './components/workRequests/AddWorkRequestModal';
+import { AddConditionReportModal, type AddConditionReportValues } from './components/workRequests/AddWorkRequestModal';
 import { DetailsPanel, type DetailTab } from './components/workRequests/DetailsPanel';
 import { FiltersBar } from './components/workRequests/FiltersBar';
 import { ScreeningToolbar } from './components/workRequests/ScreeningToolbar';
-import { WorkRequestTable } from './components/workRequests/WorkRequestTable';
+import { ConditionRecordTable } from './components/workRequests/WorkRequestTable';
 
-function requestMatchesSearch(request: WorkRequest, search: string) {
+function recordMatchesSearch(record: ConditionRecord, search: string) {
   if (!search.trim()) return true;
   const needle = search.trim().toLowerCase();
-  return [request.ticketNumber, request.description, request.location, request.status, request.woType, request.owner]
+  return [record.recordNumber, record.recordType, record.description, record.location, record.status, record.woType, record.owner]
     .join(' ')
     .toLowerCase()
     .includes(needle);
 }
 
+function getSiteLabel(siteId: string) {
+  return siteOptions.find((site) => site.id === siteId)?.label ?? siteId;
+}
+
+function getRoleLabel(roleId: string) {
+  return userRoleOptions.find((role) => role.id === roleId)?.label ?? 'Planner';
+}
+
 export default function App() {
+  const [session, setSession] = useState<AppSession | null>(null);
   const [activeStep, setActiveStep] = useState<WorkflowStep>('Screening');
   const [activeDetailTab, setActiveDetailTab] = useState<DetailTab>('Classification');
-  const [workRequests, setWorkRequests] = useState<WorkRequest[]>(mockWorkRequests);
-  const [selectedTicket, setSelectedTicket] = useState(mockWorkRequests[0].ticketNumber);
+  const [records, setRecords] = useState<ConditionRecord[]>(mockConditionRecords);
+  const [selectedRecordNumber, setSelectedRecordNumber] = useState(mockConditionRecords[0].recordNumber);
   const [search, setSearch] = useState('');
   const [siteFilter, setSiteFilter] = useState('All Sites');
-  const [statusFilter, setStatusFilter] = useState<WorkRequestStatus | 'All Status'>('All Status');
+  const [statusFilter, setStatusFilter] = useState<RecordStatus | 'All Status'>('All Status');
   const [toast, setToast] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
 
-  const selectedRequest = workRequests.find((request) => request.ticketNumber === selectedTicket) ?? workRequests[0];
+  const selectedRecord = records.find((record) => record.recordNumber === selectedRecordNumber) ?? records[0];
 
-  const filteredRequests = useMemo(
+  const filteredRecords = useMemo(
     () =>
-      workRequests.filter((request) => {
-        const siteMatches = siteFilter === 'All Sites' || request.siteId === siteFilter;
-        const statusMatches = statusFilter === 'All Status' || request.status === statusFilter;
-        return siteMatches && statusMatches && requestMatchesSearch(request, search);
+      records.filter((record) => {
+        const siteMatches = siteFilter === 'All Sites' || record.siteId === siteFilter;
+        const statusMatches = statusFilter === 'All Status' || record.status === statusFilter;
+        return siteMatches && statusMatches && recordMatchesSearch(record, search);
       }),
-    [search, siteFilter, statusFilter, workRequests],
+    [search, siteFilter, statusFilter, records],
   );
 
   function showToast(message: string) {
@@ -52,33 +69,65 @@ export default function App() {
     }, 2200);
   }
 
-  function updateSelectedRequest(updater: (request: WorkRequest) => WorkRequest) {
-    setWorkRequests((current) => current.map((request) => (request.ticketNumber === selectedTicket ? updater(request) : request)));
+  function analyzeEntrance(values: EntranceValues) {
+    if (!values.siteId) return 'Select a site before analyzing a CR, WO, PM, or condition note.';
+    if (!values.input.trim()) return 'Enter a CR, WO, PM, or condition note.';
+
+    const nextSession: AppSession = {
+      siteId: values.siteId,
+      siteLabel: getSiteLabel(values.siteId),
+      userRoleId: values.userRoleId,
+      userRoleLabel: getRoleLabel(values.userRoleId),
+      recordType: values.recordType,
+      input: values.input.trim(),
+      startedAt: new Date().toISOString(),
+    };
+
+    const matchedRecord = findRecordByInput(values.input, mockConditionRecords);
+    const sessionRecord = matchedRecord ? null : createSessionConditionRecord(nextSession, records.length + 1);
+    const nextRecords = sessionRecord ? [sessionRecord, ...mockConditionRecords] : mockConditionRecords;
+    const nextSelected = matchedRecord ?? sessionRecord ?? nextRecords[0];
+
+    setSession(nextSession);
+    setRecords(nextRecords);
+    setSelectedRecordNumber(nextSelected.recordNumber);
+    setActiveDetailTab('Classification');
+    setActiveStep(values.recordType === 'CR' ? 'Screening' : 'Planning');
+    setSearch('');
+    setSiteFilter('All Sites');
+    setStatusFilter('All Status');
+    showToast(`Mock agent output ready for ${nextSelected.recordNumber}`);
+    return null;
+  }
+
+  function updateSelectedRecord(updater: (record: ConditionRecord) => ConditionRecord) {
+    setRecords((current) => current.map((record) => (record.recordNumber === selectedRecordNumber ? updater(record) : record)));
   }
 
   function updateClassification(field: EditableClassificationField, value: string) {
-    updateSelectedRequest((request) => ({
-      ...request,
+    updateSelectedRecord((record) => ({
+      ...record,
       classification: {
-        ...request.classification,
+        ...record.classification,
         [field]: value,
       },
     }));
   }
 
-  function addWorkRequest(values: AddWorkRequestValues) {
-    const nextRequest = {
-      ...createMockWorkRequest(workRequests.length + 1),
+  function addConditionReport(values: AddConditionReportValues) {
+    const nextRecord = {
+      ...createMockConditionRecord(records.length + 1),
       description: values.description,
       location: values.location,
       owner: values.owner,
-      detailDescription: `${values.description}. This is a local demo record and must be replaced with governed Maximo/API data before production use.`,
+      siteId: session?.siteId ?? 'SITE-A',
+      detailDescription: `${values.description}. This is a local demo CR and must be replaced with governed Maximo/API data before production use.`,
     };
-    setWorkRequests((current) => [nextRequest, ...current]);
-    setSelectedTicket(nextRequest.ticketNumber);
+    setRecords((current) => [nextRecord, ...current]);
+    setSelectedRecordNumber(nextRecord.recordNumber);
     setActiveDetailTab('Classification');
     setIsAddOpen(false);
-    showToast(`${nextRequest.ticketNumber} added locally`);
+    showToast(`${nextRecord.recordNumber} added locally`);
   }
 
   function refreshFromMaximo() {
@@ -91,18 +140,22 @@ export default function App() {
   }
 
   function exportReport() {
-    downloadScreeningReport(workRequests);
-    showToast('Mock screening report exported');
+    downloadScreeningReport(records);
+    showToast('Mock CR screening report exported');
   }
 
   function moveToPlanning() {
-    updateSelectedRequest((request) => ({
-      ...request,
+    updateSelectedRecord((record) => ({
+      ...record,
       movedToPlanning: true,
-      percentComplete: Math.max(request.percentComplete, 50),
+      percentComplete: Math.max(record.percentComplete, 50),
       status: 'PLANNING',
     }));
-    showToast(`${selectedTicket} moved to planning queue`);
+    showToast(`${selectedRecordNumber} routed to planning queue`);
+  }
+
+  if (!session) {
+    return <EntranceScreen onAnalyze={analyzeEntrance} siteOptions={siteOptions} userRoleOptions={userRoleOptions} />;
   }
 
   return (
@@ -111,19 +164,48 @@ export default function App() {
         Skip to main content
       </a>
       <div className="grid min-h-screen lg:grid-cols-[14rem_minmax(0,1fr)]">
-        <Sidebar />
+        <Sidebar userRoleLabel={session.userRoleLabel} />
         <div className="min-w-0">
           <div className="flex items-center gap-3 border-b border-app-line bg-white px-4 py-3 lg:hidden">
             <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-app-purple text-white">
               <Icon className="h-5 w-5" name="logo" />
             </span>
             <div>
-              <p className="text-base font-bold leading-5 text-app-navy">Work Orders</p>
+              <p className="text-base font-bold leading-5 text-app-navy">CR Planning</p>
               <p className="text-base font-bold leading-5 text-app-navy">Companion</p>
             </div>
           </div>
           <WorkflowTabs activeStep={activeStep} onStepChange={setActiveStep} />
           <main className="mx-auto max-w-dashboard px-4 py-5 lg:px-6" id="screening" tabIndex={-1}>
+            <section className="mb-4 grid gap-3 rounded-xl border border-app-line bg-white p-3 shadow-soft lg:grid-cols-[1fr_auto]" aria-label="Current planning session">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div>
+                  <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Site</p>
+                  <p className="mt-1 text-sm font-bold text-app-navy">{session.siteLabel}</p>
+                </div>
+                <div>
+                  <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">User role</p>
+                  <p className="mt-1 text-sm font-bold text-app-navy">{session.userRoleLabel}</p>
+                </div>
+                <div>
+                  <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Source type</p>
+                  <p className="mt-1 text-sm font-bold text-app-navy">{session.recordType}</p>
+                </div>
+                <div>
+                  <p className="text-[0.7rem] font-bold uppercase tracking-wide text-app-muted">Input</p>
+                  <p className="mt-1 truncate text-sm font-bold text-app-navy">{session.input}</p>
+                </div>
+              </div>
+              <button
+                className="inline-flex min-h-9 items-center justify-center gap-2 rounded-lg border border-app-line px-3 text-sm font-bold text-app-purple hover:bg-app-purpleSoft"
+                onClick={() => setSession(null)}
+                type="button"
+              >
+                <Icon className="h-4 w-4" name="refresh" />
+                Change session
+              </button>
+            </section>
+
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_21rem]">
               <div className="min-w-0 space-y-4">
                 <ScreeningToolbar
@@ -139,12 +221,13 @@ export default function App() {
                   onStatusFilterChange={setStatusFilter}
                   search={search}
                   siteFilter={siteFilter}
+                  siteOptions={siteOptions}
                   statusFilter={statusFilter}
                 />
-                <WorkRequestTable onSelect={setSelectedTicket} selectedTicket={selectedTicket} workRequests={filteredRequests} />
+                <ConditionRecordTable onSelect={setSelectedRecordNumber} records={filteredRecords} selectedRecordNumber={selectedRecordNumber} />
                 <div className="flex flex-col gap-2 text-sm text-app-muted sm:flex-row sm:items-center sm:justify-between">
                   <p>
-                    Showing {filteredRequests.length} of {workRequests.length} WRs
+                    Showing {filteredRecords.length} of {records.length} records
                   </p>
                   <div className="flex items-center gap-2">
                     {[1, 2, 3, 4, 5].map((page) => (
@@ -164,10 +247,10 @@ export default function App() {
                   onExport={exportReport}
                   onMoveToPlanning={moveToPlanning}
                   onTabChange={setActiveDetailTab}
-                  request={selectedRequest}
+                  record={selectedRecord}
                 />
               </div>
-              <OperationalInsights request={selectedRequest} />
+              <OperationalInsights record={selectedRecord} />
             </div>
           </main>
         </div>
@@ -179,7 +262,7 @@ export default function App() {
         </div>
       ) : null}
 
-      {isAddOpen ? <AddWorkRequestModal onAdd={addWorkRequest} onClose={() => setIsAddOpen(false)} /> : null}
+      {isAddOpen ? <AddConditionReportModal onAdd={addConditionReport} onClose={() => setIsAddOpen(false)} /> : null}
     </div>
   );
 }

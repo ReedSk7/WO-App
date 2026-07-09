@@ -2,40 +2,40 @@ import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 
-type AddWorkRequestValues = {
+type AddConditionReportValues = {
   description: string;
   location: string;
   owner: string;
 };
 
-export function AddWorkRequestModal({
+export function AddConditionReportModal({
   onAdd,
   onClose,
 }: {
-  onAdd: (values: AddWorkRequestValues) => void;
+  onAdd: (values: AddConditionReportValues) => void;
   onClose: () => void;
 }) {
-  const [values, setValues] = useState<AddWorkRequestValues>({
-    description: 'New screening item from demo intake',
+  const [values, setValues] = useState<AddConditionReportValues>({
+    description: 'New condition report from demo intake',
     location: 'AREA-F-DEMO-02',
     owner: 'Unassigned',
   });
 
-  function updateField(field: keyof AddWorkRequestValues, value: string) {
+  function updateField(field: keyof AddConditionReportValues, value: string) {
     setValues((current) => ({ ...current, [field]: value }));
   }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-app-navy/45 p-4" role="presentation">
-      <section className="w-full max-w-lg rounded-xl border border-app-line bg-white p-5 shadow-panel" role="dialog" aria-modal="true" aria-labelledby="add-wr-heading">
+      <section className="w-full max-w-lg rounded-xl border border-app-line bg-white p-5 shadow-panel" role="dialog" aria-modal="true" aria-labelledby="add-cr-heading">
         <div className="flex items-start justify-between gap-4 border-b border-app-line pb-4">
           <div>
-            <h2 className="text-xl font-bold text-app-navy" id="add-wr-heading">
-              Add WR
+            <h2 className="text-xl font-bold text-app-navy" id="add-cr-heading">
+              Add CR
             </h2>
-            <p className="mt-1 text-sm text-app-muted">Creates a local mock work request for demo screening.</p>
+            <p className="mt-1 text-sm text-app-muted">Creates a local mock condition report for demo screening.</p>
           </div>
-          <button aria-label="Close add work request" className="rounded-lg p-2 text-app-muted hover:bg-app-soft hover:text-app-navy" onClick={onClose} type="button">
+          <button aria-label="Close add condition report" className="rounded-lg p-2 text-app-muted hover:bg-app-soft hover:text-app-navy" onClick={onClose} type="button">
             <Icon className="h-4 w-4" name="close" />
           </button>
         </div>
@@ -68,7 +68,7 @@ export function AddWorkRequestModal({
             variant="primary"
           >
             <Icon className="h-4 w-4" name="plus" />
-            Add demo WR
+            Add demo CR
           </Button>
         </div>
       </section>
@@ -76,4 +76,4 @@ export function AddWorkRequestModal({
   );
 }
 
-export type { AddWorkRequestValues };
+export type { AddConditionReportValues };
