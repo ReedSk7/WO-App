@@ -142,8 +142,16 @@ export interface PlannerRelatedRecord {
   tabId: MaximoTabId;
 }
 
+export interface PlannerCopyBlock {
+  id: string;
+  sequence: number;
+  summary: string;
+  longDescription: string;
+}
+
 export interface PlannerTabContent extends MaximoTabDefinition {
   lines: string[];
+  copyBlocks?: PlannerCopyBlock[];
 }
 
 export interface PlannerModeDefinition {

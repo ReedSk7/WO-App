@@ -1,7 +1,15 @@
 import { ASSISTANT_GUIDANCE, DEFAULT_RESPONSE_MODE, getPlannerModeDefinition } from '../data/agentGuidance';
 import { MAXIMO_TABS, plannerSamples, type PlannerSample } from '../data/plannerSamples';
 import { UNKNOWN_PLANNER_SITE } from '../data/plannerSites';
-import type { MaximoTabId, PlannerPackage, PlannerRecordType, PlannerResponseMode, PlannerSiteDefinition, PlannerTabContent } from '../types';
+import type {
+  MaximoTabId,
+  PlannerCopyBlock,
+  PlannerPackage,
+  PlannerRecordType,
+  PlannerResponseMode,
+  PlannerSiteDefinition,
+  PlannerTabContent,
+} from '../types';
 
 export const PLANNER_DISCLAIMER =
   'Draft only. Not approved for execution. Requires qualified planner review and applicable organizational approvals.';
@@ -102,6 +110,99 @@ function relatedRecordLabel(record: PlannerSample['relatedRecords'][number]) {
   return `${record.recordNumber} ${record.title}`;
 }
 
+function blockText(lines: string[]) {
+  return lines.join('\n');
+}
+
+function plansCopyBlocks(
+  sample: PlannerSample,
+  mode: ReturnType<typeof getPlannerModeDefinition>,
+): PlannerCopyBlock[] {
+  return [
+    {
+      id: 'plans-task-10-work-scope',
+      sequence: 10,
+      summary: 'WORK SCOPE',
+      longDescription: blockText([
+        modeOutcomeLine(mode.id),
+        `Source record: ${sample.recordNumber}.`,
+        `Affected asset/location: ${sample.asset} / ${sample.location}.`,
+        `Draft scope basis: ${sample.sourceSummary}`,
+        'Planner to verify final work scope against approved source documents before use.',
+      ]),
+    },
+    {
+      id: 'plans-task-11-precautions-limitations',
+      sequence: 11,
+      summary: 'PRECAUTIONS / LIMITATIONS',
+      longDescription: blockText([
+        'Review prerequisites, limitations, work boundaries, and required approvals before package release.',
+        'This app does not create clearance boundaries, acceptance criteria, operability decisions, or approval authority.',
+        'Return to the planner or supervisor if additional work instructions, parts, support, or review paths are required.',
+      ]),
+    },
+    {
+      id: 'plans-task-12-references',
+      sequence: 12,
+      summary: 'REFERENCES / DRAWINGS / PROCEDURES',
+      longDescription: blockText([
+        'Attach or identify governing approved source documents before final planning use.',
+        'Use approved procedure, engineering direction, vendor manual, or qualified test guidance for acceptance criteria and PMT basis.',
+        'Do not infer torque values, setpoints, calibration tolerances, limits, or procedure steps from this demo output.',
+      ]),
+    },
+    {
+      id: 'plans-task-13-operating-experience',
+      sequence: 13,
+      summary: 'OPERATING EXPERIENCE',
+      longDescription: blockText([
+        sample.relatedRecords.length > 0
+          ? `Review related fake records for planning context: ${sample.relatedRecords.map(relatedRecordLabel).join('; ')}.`
+          : 'No related fake records were matched for this demo input.',
+        'Maintenance history and operating experience are research prompts only.',
+        'Do not use history as authority for work steps, PMT scope, acceptance criteria, limits, or operability conclusions.',
+      ]),
+    },
+    {
+      id: 'plans-task-14-planner-review',
+      sequence: 14,
+      summary: 'PLANNER REVIEW / ORA SCREENING',
+      longDescription: blockText([
+        'Qualified planner review is required before the package is used beyond draft review.',
+        'Screen Operations, Safety, Fire Protection, Engineering, QC, Environmental, Cyber, and task-level ORA applicability.',
+        'Resolve missing information before moving the package beyond draft review.',
+      ]),
+    },
+    {
+      id: 'plans-task-15-support-materials-tools',
+      sequence: 15,
+      summary: 'SUPPORT / MATERIALS / TOOLS',
+      longDescription: blockText([
+        'Labor: planner to confirm craft and support needs.',
+        'Materials: identify by category only until approved parts data is available.',
+        'Tools and test equipment: placeholder pending approved source documents and calibrated equipment requirements.',
+      ]),
+    },
+    {
+      id: 'plans-task-20-high-level-work-instructions',
+      sequence: 20,
+      summary: 'HIGH-LEVEL WORK INSTRUCTIONS',
+      longDescription: blockText([
+        'Keep field-facing content clear without creating executable procedure instructions.',
+        ...lineGroup('Mode output sections', mode.outputSections),
+        ...lineGroup('Mode focus', mode.focus),
+      ]),
+    },
+  ];
+}
+
+function plansBlockLines(blocks: PlannerCopyBlock[]) {
+  return blocks.flatMap((block, index) => {
+    const lines = [`Task ${block.sequence} - ${block.summary}`, block.longDescription];
+    return index === blocks.length - 1 ? lines : [...lines, ''];
+  });
+}
+
 function tabLines(
   tabId: MaximoTabId,
   sample: PlannerSample,
@@ -129,17 +230,7 @@ function tabLines(
         `Status: Draft planner review package`,
       ];
     case 'plans':
-      return [
-        modeOutcomeLine(mode.id),
-        'Job plan: select or create only after qualified review.',
-        'Task structure standard: tasks 0-9 clearance revisions, task 10 scope, tasks 11-14 prerequisites and precautions, tasks 15-19 support tasks, tasks 20+ high-level work instructions.',
-        'Labor: planner to confirm craft and support needs.',
-        'Materials: identify by category only until approved parts data is available.',
-        'Tools and test equipment: placeholder pending approved source documents.',
-        'Use approved procedure, engineering direction, or qualified test guidance. This demo does not define acceptance criteria.',
-        ...lineGroup('Mode output sections', mode.outputSections),
-        ...lineGroup('Mode focus', mode.focus),
-      ];
+      return plansBlockLines(plansCopyBlocks(sample, mode));
     case 'reviews':
       return [
         'Planner review: required.',
@@ -239,10 +330,14 @@ export function createPlannerPackage(
   const assumptions = assumptionsFor(sample);
   const risks = risksFor(sample);
   const plannerNextActions = nextActionsFor();
-  const tabs: PlannerTabContent[] = MAXIMO_TABS.map((tab) => ({
-    ...tab,
-    lines: tabLines(tab.id, sample, confidence, generatedAt, mode),
-  }));
+  const tabs: PlannerTabContent[] = MAXIMO_TABS.map((tab) => {
+    const copyBlocks = tab.id === 'plans' ? plansCopyBlocks(sample, mode) : undefined;
+    return {
+      ...tab,
+      lines: copyBlocks ? plansBlockLines(copyBlocks) : tabLines(tab.id, sample, confidence, generatedAt, mode),
+      ...(copyBlocks ? { copyBlocks } : {}),
+    };
+  });
 
   return {
     input: rawInput,

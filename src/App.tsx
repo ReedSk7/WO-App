@@ -8,6 +8,7 @@ import { useTheme } from './hooks/useTheme';
 import { appendPlannerRefinementLog, loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
 import type {
   MaximoTabId,
+  PlannerCopyBlock,
   PlannerPackage,
   PlannerRelatedRecord,
   PlannerResponseMode,
@@ -46,6 +47,36 @@ function changedTabsFor(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdit
 
 function formatEditedPackage(plannerPackage: PlannerPackage, tabEdits: PlannerTabEdits) {
   return plannerPackage.tabs.map((tab) => `## ${tab.label}\n\n${plannerFinalText(tab, tabEdits)}`).join('\n\n');
+}
+
+function planBlockHeading(block: PlannerCopyBlock) {
+  return `Task ${block.sequence} - ${block.summary}`;
+}
+
+function planBlockValues(blocks: PlannerCopyBlock[], finalText: string) {
+  const normalizedFinalText = finalText.replace(/\r\n/g, '\n');
+  const values = blocks.reduce<Record<string, string>>((current, block) => {
+    current[block.id] = block.longDescription;
+    return current;
+  }, {});
+
+  blocks.forEach((block, index) => {
+    const heading = planBlockHeading(block);
+    const start = normalizedFinalText.indexOf(heading);
+    if (start < 0) return;
+
+    const nextHeading = blocks[index + 1] ? planBlockHeading(blocks[index + 1]) : null;
+    const bodyStart = start + heading.length;
+    const bodyEnd = nextHeading ? normalizedFinalText.indexOf(nextHeading, bodyStart) : -1;
+    const body = normalizedFinalText.slice(bodyStart, bodyEnd >= 0 ? bodyEnd : undefined).replace(/^\n+|\n+$/g, '');
+    values[block.id] = body;
+  });
+
+  return values;
+}
+
+function formatPlanBlockAggregate(blocks: PlannerCopyBlock[], values: Record<string, string>) {
+  return blocks.map((block) => `${planBlockHeading(block)}\n${values[block.id] ?? block.longDescription}`).join('\n\n');
 }
 
 function makeReviewSessionId() {
@@ -152,17 +183,73 @@ function TabButton({
   );
 }
 
+function PlansCopyBlocksPanel({
+  tab,
+  finalText,
+  onCopyBlock,
+  onEditChange,
+}: {
+  tab: PlannerTabContent;
+  finalText: string;
+  onCopyBlock: (text: string, label: string) => void;
+  onEditChange: (tabId: MaximoTabId, value: string) => void;
+}) {
+  const blocks = tab.copyBlocks ?? [];
+  const values = planBlockValues(blocks, finalText);
+
+  function updateBlock(block: PlannerCopyBlock, value: string) {
+    const nextValues = { ...values, [block.id]: value };
+    onEditChange(tab.id, formatPlanBlockAggregate(blocks, nextValues));
+  }
+
+  return (
+    <div className="mt-5 grid gap-4">
+      {blocks.map((block) => {
+        const value = values[block.id] ?? block.longDescription;
+        return (
+          <section className="rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" key={block.id}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="label">Task {block.sequence}</p>
+                <h3 className="mt-1 text-base font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{block.summary}</h3>
+                <p className="mt-1 text-xs leading-5 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+                  Copy sends long description text only. The task summary stays as the Maximo row header.
+                </p>
+              </div>
+              <button
+                className="btn-secondary min-h-9 shrink-0 px-3 py-1.5 text-xs"
+                onClick={() => onCopyBlock(value, `Task ${block.sequence} long description copied`)}
+                type="button"
+              >
+                Copy long description
+              </button>
+            </div>
+            <textarea
+              aria-label={`Task ${block.sequence} long description for ${block.summary}`}
+              className="input mt-3 min-h-36 resize-y font-mono text-sm leading-6"
+              onChange={(event) => updateBlock(block, event.target.value)}
+              value={value}
+            />
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
 function EditableTabPanel({
   tab,
   tabEdits,
   changedTabCount,
   isAdminMode,
+  onCopyBlock,
   onEditChange,
 }: {
   tab: PlannerTabContent;
   tabEdits: PlannerTabEdits;
   changedTabCount: number;
   isAdminMode: boolean;
+  onCopyBlock: (text: string, label: string) => void;
   onEditChange: (tabId: MaximoTabId, value: string) => void;
 }) {
   const generatedText = agentGeneratedText(tab);
@@ -170,6 +257,7 @@ function EditableTabPanel({
   const summary = summarizeRefinementTab(tab, tabEdits);
   const changeTotal = summary.added + summary.removed + summary.edited;
   const details = summary.changes.slice(0, 6);
+  const hasPlansCopyBlocks = tab.id === 'plans' && (tab.copyBlocks?.length ?? 0) > 0;
 
   return (
     <section
@@ -182,7 +270,9 @@ function EditableTabPanel({
         <div>
           <h2 className="text-lg font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{tab.label}</h2>
           <p className="mt-1 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
-            Compare the agent baseline against the planner final text before copying into the work package.
+            {hasPlansCopyBlocks
+              ? 'Edit each Maximo task long description separately before copying it into the task row.'
+              : 'Compare the agent baseline against the planner final text before copying into the work package.'}
           </p>
         </div>
         {isAdminMode ? (
@@ -192,27 +282,31 @@ function EditableTabPanel({
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
-          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Agent generated baseline</h3>
-          <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-light p-3 text-sm leading-6 text-texttone-primaryLight dark:bg-surface-dark dark:text-texttone-primaryDark">
-            {generatedText}
-          </pre>
-        </section>
+      {hasPlansCopyBlocks ? (
+        <PlansCopyBlocksPanel finalText={finalText} onCopyBlock={onCopyBlock} onEditChange={onEditChange} tab={tab} />
+      ) : (
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
+            <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Agent generated baseline</h3>
+            <pre className="mt-3 max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-light p-3 text-sm leading-6 text-texttone-primaryLight dark:bg-surface-dark dark:text-texttone-primaryDark">
+              {generatedText}
+            </pre>
+          </section>
 
-        <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
-          <label className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark" htmlFor={`final-${tab.id}`}>
-            Planner final text for copy/paste
-          </label>
-          <textarea
-            aria-label={`Planner final text for copy/paste for ${tab.label}`}
-            className="input mt-3 min-h-[28rem] resize-y font-mono text-sm leading-6"
-            id={`final-${tab.id}`}
-            onChange={(event) => onEditChange(tab.id, event.target.value)}
-            value={finalText}
-          />
-        </section>
-      </div>
+          <section className="min-w-0 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark">
+            <label className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark" htmlFor={`final-${tab.id}`}>
+              Planner final text for copy/paste
+            </label>
+            <textarea
+              aria-label={`Planner final text for copy/paste for ${tab.label}`}
+              className="input mt-3 min-h-[28rem] resize-y font-mono text-sm leading-6"
+              id={`final-${tab.id}`}
+              onChange={(event) => onEditChange(tab.id, event.target.value)}
+              value={finalText}
+            />
+          </section>
+        </div>
+      )}
 
       {isAdminMode ? (
         <section className="mt-4 rounded-md border border-border-subtle bg-surface-raisedLight p-4 dark:bg-surface-raisedDark" aria-label={`Changes for ${tab.label}`}>
@@ -625,6 +719,7 @@ function ResultScreen({
   plannerPackage,
   tabEdits,
   onActiveTabChange,
+  onCopyBlock,
   onCopyEditedPackage,
   onCopyEditedTab,
   onEditChange,
@@ -638,6 +733,7 @@ function ResultScreen({
   plannerPackage: PlannerPackage;
   tabEdits: PlannerTabEdits;
   onActiveTabChange: (tabId: MaximoTabId) => void;
+  onCopyBlock: (text: string, label: string) => void;
   onCopyEditedPackage: () => void;
   onCopyEditedTab: () => void;
   onEditChange: (tabId: MaximoTabId, value: string) => void;
@@ -728,7 +824,14 @@ function ResultScreen({
               <TabButton active={tab.id === activeTab.id} key={tab.id} label={tab.label} onClick={onActiveTabChange} tabId={tab.id} />
             ))}
           </div>
-          <EditableTabPanel changedTabCount={changedTabs.length} isAdminMode={isAdminMode} onEditChange={onEditChange} tab={activeTab} tabEdits={tabEdits} />
+          <EditableTabPanel
+            changedTabCount={changedTabs.length}
+            isAdminMode={isAdminMode}
+            onCopyBlock={onCopyBlock}
+            onEditChange={onEditChange}
+            tab={activeTab}
+            tabEdits={tabEdits}
+          />
         </section>
       </div>
     </main>
@@ -843,6 +946,10 @@ export default function App() {
     void copyText(formatEditedPackage(plannerPackage, tabEdits), 'Planner final package copied');
   }
 
+  function copyBlock(text: string, label: string) {
+    void copyText(text, label);
+  }
+
   function currentRefinementReport() {
     if (!plannerPackage) return null;
     return createRefinementReport(plannerPackage, tabEdits, reviewSessionId ?? 'unsaved-session');
@@ -887,6 +994,7 @@ export default function App() {
           activeTabId={activeTabId}
           isAdminMode={isAdminMode}
           onActiveTabChange={setActiveTabId}
+          onCopyBlock={copyBlock}
           onCopyEditedPackage={copyEditedPackage}
           onCopyEditedTab={copyEditedTab}
           onEditChange={updateTabEdit}

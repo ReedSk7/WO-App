@@ -49,7 +49,7 @@ describe('planner package generation', () => {
       'Clearance scope must align with final approved work instructions. This app does not create or approve clearance boundaries.',
     );
     expect(outputText).toContain(
-      'Use approved procedure, engineering direction, or qualified test guidance. This demo does not define acceptance criteria.',
+      'Use approved procedure, engineering direction, vendor manual, or qualified test guidance for acceptance criteria and PMT basis.',
     );
     expect(outputText).toContain(
       'Acceptance criteria must come from approved procedure, engineering direction, vendor manual, or qualified test guidance.',
@@ -60,6 +60,18 @@ describe('planner package generation', () => {
     expect(outputText).not.toMatch(/\breal plant\b/i);
     expect(outputText).not.toMatch(/\btorque\s+\d+/i);
     expect(outputText).not.toMatch(/\bsetpoint\s+\d+/i);
+  });
+
+  it('creates Plans task blocks for Maximo long-description copy/paste', () => {
+    const plannerPackage = createPlannerPackage('DEMO-WO-3001', fixedNow, 'research-planning-basis');
+    const plansTab = plannerPackage.tabs.find((tab) => tab.id === 'plans');
+
+    expect(plansTab?.copyBlocks?.map((block) => block.sequence)).toEqual([10, 11, 12, 13, 14, 15, 20]);
+    expect(plansTab?.copyBlocks?.[0]).toMatchObject({ sequence: 10, summary: 'WORK SCOPE' });
+    expect(plansTab?.copyBlocks?.[0].longDescription).toContain('Source record: DEMO-WO-3001.');
+    expect(plansTab?.copyBlocks?.[0].longDescription).not.toContain('WORK SCOPE');
+    expect(plansTab?.copyBlocks?.[6].longDescription).toContain('- Treat history as context, not authority.');
+    expect(plansTab?.lines.join('\n')).toContain('Task 10 - WORK SCOPE');
   });
 
   it('adds distinct public-safe guidance for each response mode', () => {

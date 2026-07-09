@@ -1,7 +1,9 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { STORAGE_KEYS } from './storage/local';
+
+const writeTextMock = vi.fn();
 
 function selectSite(siteId = 'hatch') {
   fireEvent.change(screen.getByLabelText('Select site'), {
@@ -20,11 +22,19 @@ function enterAndAnalyze(value: string, siteId = 'hatch') {
 beforeEach(() => {
   window.history.pushState({}, '', '/');
   localStorage.clear();
+  writeTextMock.mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: writeTextMock,
+    },
+  });
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  writeTextMock.mockReset();
   window.history.pushState({}, '', '/');
 });
 
@@ -118,9 +128,29 @@ describe('planner MVP app shell', () => {
     expect(screen.getAllByText('Research / Planning Basis').length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('tab', { name: 'Plans' }));
-    expect((screen.getByLabelText('Planner final text for copy/paste for Plans') as HTMLTextAreaElement).value).toContain(
+    expect(screen.queryByLabelText('Planner final text for copy/paste for Plans')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'WORK SCOPE' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Copy long description' })).toHaveLength(7);
+    expect((screen.getByLabelText('Task 20 long description for HIGH-LEVEL WORK INSTRUCTIONS') as HTMLTextAreaElement).value).toContain(
       '- Treat history as context, not authority.',
     );
+  });
+
+  it('copies only the edited Plans long-description body for a task block', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-WO-3001');
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Plans' }));
+    const task10 = screen.getByLabelText('Task 10 long description for WORK SCOPE') as HTMLTextAreaElement;
+    fireEvent.change(task10, {
+      target: { value: 'Edited body for Maximo long description only.' },
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Copy long description' })[0]);
+
+    await waitFor(() => expect(writeTextMock).toHaveBeenCalledWith('Edited body for Maximo long description only.'));
+    expect(writeTextMock.mock.calls[0][0]).not.toContain('Task 10');
+    expect(writeTextMock.mock.calls[0][0]).not.toContain('WORK SCOPE');
   });
 
   it('uses a conservative generic package when no fake sample matches', async () => {
@@ -199,6 +229,34 @@ describe('planner MVP app shell', () => {
     expect(screen.getByText('Vogtle 1 and 2')).toBeInTheDocument();
     expect((screen.getByLabelText('Planner final text for copy/paste for Workorder') as HTMLTextAreaElement).value).toContain(
       'Planner edit: preserve as-found notes for later review.',
+    );
+  });
+
+  it('saves and resumes edited Plans task long descriptions', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-CR-1001');
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Plans' }));
+    const task10 = screen.getByLabelText('Task 10 long description for WORK SCOPE') as HTMLTextAreaElement;
+    fireEvent.change(task10, {
+      target: { value: `${task10.value}\nPlanner edit: paste this into the Maximo task 10 long description.` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save progress' }));
+
+    const logs = JSON.parse(localStorage.getItem(STORAGE_KEYS.plannerRefinementLogs) ?? '[]');
+    expect(logs[0].report.tabs.find((tab: { tabId: string }) => tab.tabId === 'plans').plannerFinalText).toContain(
+      'Planner edit: paste this into the Maximo task 10 long description.',
+    );
+
+    cleanup();
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume saved progress' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Plans' }));
+
+    expect((screen.getByLabelText('Task 10 long description for WORK SCOPE') as HTMLTextAreaElement).value).toContain(
+      'Planner edit: paste this into the Maximo task 10 long description.',
     );
   });
 });
