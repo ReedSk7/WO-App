@@ -5,7 +5,7 @@ import { findPlannerSite, PLANNER_SITES } from './data/plannerSites';
 import { ToastRegion } from './components/ui/ToastRegion';
 import { useClipboard } from './hooks/useClipboard';
 import { useTheme } from './hooks/useTheme';
-import { appendPlannerRefinementLog, loadCurrentPlannerReviewSession, upsertPlannerReviewSession } from './storage/local';
+import { appendPlannerRefinementLog, loadCurrentPlannerReviewSession, loadPlannerRefinementLogs, upsertPlannerReviewSession } from './storage/local';
 import type {
   MaximoTabId,
   PlannerCopyBlock,
@@ -30,9 +30,113 @@ import {
 } from './utils/refinementReport';
 
 type ScreenState = 'input' | 'result';
+type ResultView = 'overview' | 'research-summary' | 'maximo-tabs' | 'reports' | 'admin';
+type ResultNavGroup = 'workflows' | 'reports' | 'admin';
 type SiteSelectValue = PlannerSiteId | '';
 
 const exampleInputs = ['DEMO-CR-1001', 'DEMO-MPL-2001', 'DEMO-WO-3001'];
+
+type ResultNavItem = {
+  id: string;
+  label: string;
+  description: string;
+  view: ResultView;
+  tabId?: MaximoTabId;
+};
+
+const workflowNavItems: ResultNavItem[] = [
+  {
+    id: 'workflow-overview',
+    label: 'Workorder',
+    description: 'Package overview and relationship map',
+    view: 'overview',
+    tabId: 'workorder',
+  },
+  {
+    id: 'workflow-research',
+    label: 'Research Summary',
+    description: 'Databricks-style planning context',
+    view: 'research-summary',
+  },
+  {
+    id: 'workflow-plans',
+    label: 'Plans',
+    description: 'Maximo task copy blocks',
+    view: 'maximo-tabs',
+    tabId: 'plans',
+  },
+  {
+    id: 'workflow-reviews',
+    label: 'Reviews',
+    description: 'Required review paths',
+    view: 'maximo-tabs',
+    tabId: 'reviews',
+  },
+  {
+    id: 'workflow-engineering',
+    label: 'Engineering',
+    description: 'Technical review questions',
+    view: 'maximo-tabs',
+    tabId: 'engineering',
+  },
+  {
+    id: 'workflow-scheduling',
+    label: 'Scheduling',
+    description: 'Holds and workability checks',
+    view: 'maximo-tabs',
+    tabId: 'scheduling',
+  },
+  {
+    id: 'workflow-closeout',
+    label: 'Completion',
+    description: 'Actuals, log, and closeout review',
+    view: 'maximo-tabs',
+    tabId: 'actuals',
+  },
+];
+
+const reportNavItems: ResultNavItem[] = [
+  {
+    id: 'report-package',
+    label: 'Planner Package',
+    description: 'Full package review',
+    view: 'overview',
+  },
+  {
+    id: 'report-plans-copy',
+    label: 'Plans Copy Packet',
+    description: 'Task long descriptions',
+    view: 'maximo-tabs',
+    tabId: 'plans',
+  },
+  {
+    id: 'report-refinement',
+    label: 'Refinement Report',
+    description: 'Exports and changed tabs',
+    view: 'reports',
+  },
+];
+
+const adminNavItems: ResultNavItem[] = [
+  {
+    id: 'admin-summary',
+    label: 'Local Admin Summary',
+    description: 'Session and edit counts',
+    view: 'admin',
+  },
+  {
+    id: 'admin-log',
+    label: 'Refinement Log',
+    description: 'Saved local snapshots',
+    view: 'admin',
+  },
+  {
+    id: 'admin-session',
+    label: 'Local Session',
+    description: 'Storage-only review state',
+    view: 'admin',
+  },
+];
 
 function createInitialTabEdits(plannerPackage: PlannerPackage): PlannerTabEdits {
   return plannerPackage.tabs.reduce<PlannerTabEdits>((edits, tab) => {
@@ -116,6 +220,292 @@ function ReviewList({ title, items }: { title: string; items: string[] }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+function toWalkdownQuestion(gap: string) {
+  const normalized = gap.replace(/^Confirm\s+/i, '').replace(/\.$/, '').trim();
+  if (!normalized) return 'What field condition requires planner verification before release?';
+  return `Can the planner verify ${normalized.charAt(0).toLowerCase()}${normalized.slice(1)}?`;
+}
+
+function firstLine(value: string) {
+  return value.split('\n').find((line) => line.trim().length > 0)?.trim() ?? 'Planner review required before use.';
+}
+
+function ResearchSummarySection({ items, title }: { items: string[]; title: string }) {
+  return (
+    <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark">
+      <h3 className="text-sm font-semibold uppercase tracking-normal text-texttone-primaryLight dark:text-texttone-primaryDark">{title}</h3>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+        {items.map((item) => (
+          <li className="flex gap-2" key={item}>
+            <span aria-hidden="true" className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-500 dark:bg-brand-400" />
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ResearchSummaryPanel({ plannerPackage }: { plannerPackage: PlannerPackage }) {
+  const plansTab = plannerPackage.tabs.find((tab) => tab.id === 'plans');
+  const planBlocks = plansTab?.copyBlocks ?? [];
+  const planningImplications =
+    planBlocks.length > 0
+      ? planBlocks.map((block) => `Task ${block.sequence} ${block.summary}: ${firstLine(block.longDescription)}`)
+      : plannerPackage.modeFocus;
+  const documentsToCheck = [
+    'Governing approved source document for the fake/demo record.',
+    'Approved planning aids, checklists, or cover sheets that apply to the final scope.',
+    'Related fake record history for context only, not authority.',
+    ...plannerPackage.assistantGuidance.sourcePrecedence.slice(0, 3),
+  ];
+  const walkdownQuestions = plannerPackage.informationGaps.map(toWalkdownQuestion);
+  const reportDate = new Date(plannerPackage.generatedAt).toLocaleDateString();
+
+  return (
+    <section className="space-y-4" aria-label="Research Summary">
+      <div className="rounded-md border border-border-subtle bg-surface-light p-5 dark:bg-surface-dark">
+        <p className="label">Databricks-style structure, demo data only</p>
+        <h2 className="mt-2 text-xl font-semibold uppercase tracking-normal text-texttone-primaryLight dark:text-texttone-primaryDark">
+          Research Summary - {plannerPackage.recordNumber}
+        </h2>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <SummaryTile label="Record" value={plannerPackage.recordNumber} />
+          <SummaryTile label="Equipment" value={plannerPackage.asset} />
+          <SummaryTile label="Work Type" value={plannerPackage.workType} />
+          <SummaryTile label="Discipline" value={plannerPackage.discipline} />
+          <SummaryTile label="Report Date" value={reportDate} />
+          <SummaryTile label="Mode" value={plannerPackage.modeLabel} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ResearchSummarySection items={plannerPackage.knownFacts} title="What Is Known" />
+        <ResearchSummarySection items={plannerPackage.assumptions} title="What It May Indicate" />
+        <ResearchSummarySection items={plannerPackage.informationGaps} title="What Cannot Be Concluded" />
+        <ResearchSummarySection items={planningImplications} title="Planning Implications" />
+        <ResearchSummarySection items={documentsToCheck} title="Documents To Check" />
+        <ResearchSummarySection items={walkdownQuestions} title="Walkdown Questions" />
+        <ResearchSummarySection items={plannerPackage.risks} title="Risks" />
+        <ResearchSummarySection items={plannerPackage.plannerNextActions} title="Planner Next Actions" />
+      </div>
+    </section>
+  );
+}
+
+function ReportsPanel({
+  changedTabs,
+  plannerPackage,
+  tabEdits,
+  onCopyEditedPackage,
+  onCopyEditedTab,
+  onExportJson,
+  onExportMarkdown,
+}: {
+  changedTabs: PlannerTabContent[];
+  plannerPackage: PlannerPackage;
+  tabEdits: PlannerTabEdits;
+  onCopyEditedPackage: () => void;
+  onCopyEditedTab: () => void;
+  onExportJson: () => void;
+  onExportMarkdown: () => void;
+}) {
+  const planBlockCount = plannerPackage.tabs.find((tab) => tab.id === 'plans')?.copyBlocks?.length ?? 0;
+  const changedTabLabels = changedTabs.map((tab) => tab.label).join(', ') || 'No changed tabs yet';
+  const report = createRefinementReport(plannerPackage, tabEdits, 'unsaved-session-preview');
+
+  return (
+    <section className="space-y-4" aria-label="Reports">
+      <div className="rounded-md border border-border-subtle bg-surface-light p-5 dark:bg-surface-dark">
+        <p className="label">Reports</p>
+        <h2 className="mt-2 text-xl font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Planner package reports</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+          Use these local report tools to copy the reviewed package, export refinement details, or return to the Plans workflow for
+          task-by-task Maximo long-description copy blocks.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <SummaryTile label="Changed Tabs" value={String(changedTabs.length)} />
+          <SummaryTile label="Plans Blocks" value={String(planBlockCount)} />
+          <SummaryTile label="Changed Tab Names" value={changedTabLabels} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark">
+          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Copy outputs</h3>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <button className="btn-secondary" onClick={onCopyEditedTab} type="button">
+              Copy current Maximo tab
+            </button>
+            <button className="btn-secondary" onClick={onCopyEditedPackage} type="button">
+              Copy full planner package
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark">
+          <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Refinement exports</h3>
+          <p className="mt-2 text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            Exported reports compare the agent baseline against the planner final text. They stay local to this browser.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <button className="btn-secondary" onClick={onExportJson} type="button">
+              Export refinement JSON
+            </button>
+            <button className="btn-secondary" onClick={onExportMarkdown} type="button">
+              Export refinement Markdown
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark">
+        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Current report preview</h3>
+        <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+          Kept: {report.totals.kept} | Removed: {report.totals.removed} | Added: {report.totals.added} | Edited: {report.totals.edited}
+        </p>
+      </section>
+    </section>
+  );
+}
+
+function AdminPanel({
+  changedTabs,
+  isAdminMode,
+  plannerPackage,
+  reviewCreatedAt,
+  reviewSessionId,
+}: {
+  changedTabs: PlannerTabContent[];
+  isAdminMode: boolean;
+  plannerPackage: PlannerPackage;
+  reviewCreatedAt: string | null;
+  reviewSessionId: string | null;
+}) {
+  const refinementLogs = useMemo(
+    () => loadPlannerRefinementLogs().filter((entry) => entry.recordNumber === plannerPackage.recordNumber).slice(0, 5),
+    [plannerPackage.recordNumber, reviewSessionId],
+  );
+
+  return (
+    <section className="space-y-4" aria-label="Admin">
+      <div className="rounded-md border border-border-subtle bg-surface-light p-5 dark:bg-surface-dark">
+        <p className="label">Admin tool</p>
+        <h2 className="mt-2 text-xl font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Local admin summary</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+          This is a browser-local admin surface for review state, saved refinement logs, and export readiness. It does not represent
+          server-side administration, Maximo access, or Databricks access.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryTile label="Admin Query" value={isAdminMode ? 'Enabled' : 'Not enabled'} />
+          <SummaryTile label="Session" value={reviewSessionId ?? 'Unsaved session'} />
+          <SummaryTile label="Created" value={reviewCreatedAt ? new Date(reviewCreatedAt).toLocaleString() : 'Not saved'} />
+          <SummaryTile label="Changed Tabs" value={String(changedTabs.length)} />
+        </div>
+      </div>
+
+      <section className="rounded-md border border-border-subtle bg-surface-light p-4 dark:bg-surface-dark">
+        <h3 className="text-sm font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">Refinement log</h3>
+        {refinementLogs.length > 0 ? (
+          <ul className="mt-3 space-y-3 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            {refinementLogs.map((entry) => (
+              <li className="rounded-md border border-border-subtle bg-surface-raisedLight p-3 dark:bg-surface-raisedDark" key={entry.id}>
+                <p className="font-semibold text-texttone-primaryLight dark:text-texttone-primaryDark">{new Date(entry.savedAt).toLocaleString()}</p>
+                <p className="mt-1">
+                  Active tab: {entry.activeTabId} | Changed tabs: {entry.report.changedTabs}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-texttone-secondaryLight dark:text-texttone-secondaryDark">
+            No saved refinement snapshots for this record yet. Use Save progress to create the first local log entry.
+          </p>
+        )}
+      </section>
+    </section>
+  );
+}
+
+function ResultShellNav({
+  activeItemId,
+  plannerPackage,
+  onSelectItem,
+}: {
+  activeItemId: string;
+  plannerPackage: PlannerPackage;
+  onSelectItem: (item: ResultNavItem) => void;
+}) {
+  const [openGroups, setOpenGroups] = useState<Record<ResultNavGroup, boolean>>({
+    workflows: true,
+    reports: true,
+    admin: true,
+  });
+
+  function toggleGroup(group: ResultNavGroup) {
+    setOpenGroups((current) => ({ ...current, [group]: !current[group] }));
+  }
+
+  function renderGroup(group: ResultNavGroup, title: string, items: ResultNavItem[]) {
+    const open = openGroups[group];
+    return (
+      <section className="border-t border-white/10 pt-3" key={group}>
+        <button
+          aria-expanded={open}
+          className="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-xs font-semibold uppercase text-white/70 transition hover:bg-white/10 hover:text-white"
+          onClick={() => toggleGroup(group)}
+          type="button"
+        >
+          <span>{title}</span>
+          <span aria-hidden="true">{open ? '-' : '+'}</span>
+        </button>
+        {open ? (
+          <div className="mt-1 space-y-1">
+            {items.map((item) => {
+              const active = item.id === activeItemId;
+              return (
+                <button
+                  aria-label={`${title} ${item.label}`}
+                  aria-pressed={active}
+                  className={`w-full rounded-md px-3 py-2 text-left transition ${
+                    active ? 'bg-white text-[#161616]' : 'text-white/82 hover:bg-white/10 hover:text-white'
+                  }`}
+                  key={item.id}
+                  onClick={() => onSelectItem(item)}
+                  type="button"
+                >
+                  <span className="block text-sm font-semibold">{item.label}</span>
+                  <span className={`mt-1 block text-xs leading-4 ${active ? 'text-[#525252]' : 'text-white/56'}`}>{item.description}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <aside className="no-print border-b border-white/10 bg-[#262626] text-white lg:sticky lg:top-0 lg:h-screen lg:border-b-0 lg:border-r">
+      <div className="flex h-full flex-col">
+        <div className="border-b border-white/10 p-5">
+          <p className="text-xs font-semibold uppercase text-white/60">Local demo</p>
+          <h2 className="mt-2 text-lg font-semibold leading-6 text-white">WO Planning Companion</h2>
+          <p className="mt-3 break-words font-mono text-xs text-white/60">{plannerPackage.recordNumber}</p>
+        </div>
+        <nav aria-label="Workflow navigation" className="flex-1 space-y-3 p-3">
+          {renderGroup('workflows', 'Workflows', workflowNavItems)}
+          {renderGroup('reports', 'Reports', reportNavItems)}
+          {renderGroup('admin', 'Admin', adminNavItems)}
+        </nav>
+        <div className="border-t border-white/10 p-4">
+          <p className="text-xs leading-5 text-white/55">Demo-only local storage. No live Maximo or Databricks connection.</p>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -717,6 +1107,8 @@ function ResultScreen({
   activeTabId,
   isAdminMode,
   plannerPackage,
+  reviewCreatedAt,
+  reviewSessionId,
   tabEdits,
   onActiveTabChange,
   onCopyBlock,
@@ -731,6 +1123,8 @@ function ResultScreen({
   activeTabId: MaximoTabId;
   isAdminMode: boolean;
   plannerPackage: PlannerPackage;
+  reviewCreatedAt: string | null;
+  reviewSessionId: string | null;
   tabEdits: PlannerTabEdits;
   onActiveTabChange: (tabId: MaximoTabId) => void;
   onCopyBlock: (text: string, label: string) => void;
@@ -747,10 +1141,54 @@ function ResultScreen({
     [activeTabId, plannerPackage.tabs],
   );
   const changedTabs = changedTabsFor(plannerPackage, tabEdits);
+  const [activeView, setActiveView] = useState<ResultView>('overview');
+  const [activeNavItemId, setActiveNavItemId] = useState('workflow-overview');
+
+  function selectResultNavItem(item: ResultNavItem) {
+    if (item.tabId) onActiveTabChange(item.tabId);
+    setActiveView(item.view);
+    setActiveNavItemId(item.id);
+  }
+
+  function selectMaximoTab(tabId: MaximoTabId) {
+    onActiveTabChange(tabId);
+    if (activeView === 'maximo-tabs') {
+      const matchingWorkflow = workflowNavItems.find((item) => item.tabId === tabId);
+      if (matchingWorkflow) setActiveNavItemId(matchingWorkflow.id);
+    }
+  }
+
+  const maximoTabsPanel = (
+    <section aria-label="Maximo-style planning details" className="min-w-0">
+      <div
+        aria-label="Maximo planning tabs"
+        className="flex overflow-x-auto rounded-t-md border border-border-subtle bg-surface-light dark:bg-surface-dark"
+        role="tablist"
+      >
+        {MAXIMO_TABS.map((tab) => (
+          <TabButton active={tab.id === activeTab.id} key={tab.id} label={tab.label} onClick={selectMaximoTab} tabId={tab.id} />
+        ))}
+      </div>
+      <EditableTabPanel
+        changedTabCount={changedTabs.length}
+        isAdminMode={isAdminMode}
+        onCopyBlock={onCopyBlock}
+        onEditChange={onEditChange}
+        tab={activeTab}
+        tabEdits={tabEdits}
+      />
+    </section>
+  );
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-workbench px-4 py-6 sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
-      <div className="animate-fade-in space-y-6">
+    <div className="min-h-screen lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <ResultShellNav
+        activeItemId={activeNavItemId}
+        onSelectItem={selectResultNavItem}
+        plannerPackage={plannerPackage}
+      />
+      <main className="min-w-0 px-4 py-6 sm:px-6 lg:px-8" id="main-content" tabIndex={-1}>
+      <div className="mx-auto max-w-workbench animate-fade-in space-y-6">
         <header className="flex flex-col gap-4 border-b border-border-subtle pb-5 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="label">Draft planner package</p>
@@ -804,37 +1242,47 @@ function ResultScreen({
           <SummaryTile label="Asset" value={plannerPackage.asset} />
         </section>
 
-        <RelationshipMappingPanel activeTabId={activeTabId} onSelectTab={onActiveTabChange} plannerPackage={plannerPackage} />
+        {activeView === 'overview' ? (
+          <>
+            <RelationshipMappingPanel activeTabId={activeTabId} onSelectTab={selectMaximoTab} plannerPackage={plannerPackage} />
 
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          <ReviewList items={plannerPackage.knownFacts} title="Known Conditions" />
-          <ReviewList items={plannerPackage.assumptions} title="Assumptions" />
-          <ReviewList items={plannerPackage.informationGaps} title="Information Gaps" />
-          <ReviewList items={plannerPackage.risks} title="Risks" />
-          <ReviewList items={plannerPackage.plannerNextActions} title="Planner Next Actions" />
-        </div>
+            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              <ReviewList items={plannerPackage.knownFacts} title="Known Conditions" />
+              <ReviewList items={plannerPackage.assumptions} title="Assumptions" />
+              <ReviewList items={plannerPackage.informationGaps} title="Information Gaps" />
+              <ReviewList items={plannerPackage.risks} title="Risks" />
+              <ReviewList items={plannerPackage.plannerNextActions} title="Planner Next Actions" />
+            </div>
 
-        <section aria-label="Maximo-style planning details" className="min-w-0">
-          <div
-            aria-label="Maximo planning tabs"
-            className="flex overflow-x-auto rounded-t-md border border-border-subtle bg-surface-light dark:bg-surface-dark"
-            role="tablist"
-          >
-            {MAXIMO_TABS.map((tab) => (
-              <TabButton active={tab.id === activeTab.id} key={tab.id} label={tab.label} onClick={onActiveTabChange} tabId={tab.id} />
-            ))}
-          </div>
-          <EditableTabPanel
-            changedTabCount={changedTabs.length}
-            isAdminMode={isAdminMode}
-            onCopyBlock={onCopyBlock}
-            onEditChange={onEditChange}
-            tab={activeTab}
+            {maximoTabsPanel}
+          </>
+        ) : null}
+
+        {activeView === 'research-summary' ? <ResearchSummaryPanel plannerPackage={plannerPackage} /> : null}
+        {activeView === 'maximo-tabs' ? maximoTabsPanel : null}
+        {activeView === 'reports' ? (
+          <ReportsPanel
+            changedTabs={changedTabs}
+            onCopyEditedPackage={onCopyEditedPackage}
+            onCopyEditedTab={onCopyEditedTab}
+            onExportJson={onExportJson}
+            onExportMarkdown={onExportMarkdown}
+            plannerPackage={plannerPackage}
             tabEdits={tabEdits}
           />
-        </section>
+        ) : null}
+        {activeView === 'admin' ? (
+          <AdminPanel
+            changedTabs={changedTabs}
+            isAdminMode={isAdminMode}
+            plannerPackage={plannerPackage}
+            reviewCreatedAt={reviewCreatedAt}
+            reviewSessionId={reviewSessionId}
+          />
+        ) : null}
       </div>
-    </main>
+      </main>
+    </div>
   );
 }
 
@@ -1003,6 +1451,8 @@ export default function App() {
           onSaveProgress={saveProgress}
           onStartOver={startOver}
           plannerPackage={plannerPackage}
+          reviewCreatedAt={reviewCreatedAt}
+          reviewSessionId={reviewSessionId}
           tabEdits={tabEdits}
         />
       ) : (

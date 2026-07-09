@@ -107,6 +107,48 @@ describe('planner MVP app shell', () => {
     ]);
   });
 
+  it('uses left-side workflow navigation for research summary and Plans copy blocks', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-CR-1001');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Workflows Research Summary' }));
+
+    expect(screen.getByRole('heading', { name: /Research Summary - DEMO-CR-1001/i })).toBeInTheDocument();
+    expect(screen.getByText('Databricks-style structure, demo data only')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What Is Known' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What It May Indicate' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'What Cannot Be Concluded' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Planning Implications' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Documents To Check' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Walkdown Questions' })).toBeInTheDocument();
+    expect(screen.queryByText('SNC2433928')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Workflows Plans' }));
+
+    expect(screen.getByRole('heading', { name: 'WORK SCOPE' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Copy long description' })).toHaveLength(7);
+  });
+
+  it('opens reports and admin tools from the left navigation', async () => {
+    render(<App />);
+
+    enterAndAnalyze('DEMO-WO-3001');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reports Refinement Report' }));
+
+    expect(screen.getByRole('heading', { name: 'Planner package reports' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement JSON' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export refinement Markdown' })).toBeInTheDocument();
+    expect(screen.getByText('Plans Blocks')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Admin Local Admin Summary' }));
+
+    expect(screen.getByRole('heading', { name: 'Local admin summary' })).toBeInTheDocument();
+    expect(screen.getByText('Refinement log')).toBeInTheDocument();
+    expect(screen.getByText('No saved refinement snapshots for this record yet. Use Save progress to create the first local log entry.')).toBeInTheDocument();
+  });
+
   it('clicks relationship nodes to jump to related Maximo tabs', async () => {
     render(<App />);
 
