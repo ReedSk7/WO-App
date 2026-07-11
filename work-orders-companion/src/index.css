@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+@layer base {
+  html {
+    @apply bg-app-bg antialiased;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-app-bg text-sm text-app-navy;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-app-purple focus-visible:ring-offset-2 focus-visible:ring-offset-app-bg;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-xl border border-app-line bg-white shadow-soft;
+  }
+
+  .field {
+    @apply min-h-10 w-full rounded-lg border border-app-line bg-white px-3 py-2 text-sm font-medium text-app-navy shadow-sm transition placeholder:text-app-muted hover:border-app-purple/40;
+  }
+
+  .field-label {
+    @apply text-xs font-bold uppercase tracking-wide text-app-muted;
+  }
+
+  .badge {
+    @apply inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-xs font-bold leading-none;
+  }
+
+  .nav-item {
+    @apply flex min-h-9 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-app-navy transition hover:bg-app-purpleSoft hover:text-app-purple;
+  }
+
+  .pagination-button {
+    @apply flex h-8 w-8 items-center justify-center rounded-lg border border-app-line text-sm font-bold shadow-sm transition hover:border-app-purple/40 hover:bg-app-purpleSoft;
+  }
+
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 1023px) {
+  .nav-item {
+    @apply min-h-9;
+  }
+}
