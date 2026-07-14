@@ -55,6 +55,19 @@ Run all checks with:
 npm run check
 ```
 
+## Netlify deployment
+
+The default build uses standard Next.js and produces the `.next` directory
+expected by Netlify's Next.js runtime:
+
+```powershell
+npm run build
+```
+
+Repository build settings are defined in `netlify.toml`. The existing vinext
+adapter remains available for the separate Sites workflow through
+`npm run build:sites`.
+
 ## Project structure
 
 - `app/components/` — field UI, summaries, filters, expandable detail views,
