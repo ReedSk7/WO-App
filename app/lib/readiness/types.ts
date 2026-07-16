@@ -197,6 +197,7 @@ export interface EnergySourceRecord {
 
 export interface ClearanceEnergyControlDetail {
   isolationRequired: "Required" | "Not Required" | "Undetermined";
+  clearanceRequestNumber?: string;
   clearanceRequestStatus?: string;
   energySources: EnergySourceRecord[];
   localIsolationAvailability?: "Available" | "Unavailable" | "Undetermined";

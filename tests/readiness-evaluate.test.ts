@@ -84,6 +84,26 @@ test("mock catalog has the exact five scenarios, synthetic work orders, and all 
   }
 });
 
+test("every synthetic clearance exposes a matching request and source-record identity", () => {
+  for (const scenario of MOCK_SCENARIOS) {
+    const clearance = scenario.items.find(
+      (candidate) => candidate.category === "clearance-and-energy-control",
+    );
+    const expectedNumber = `DEMO-${scenario.workOrder.workOrderNumber.slice(-3)}-CLEARANCE-01`;
+
+    assert.ok(clearance, `${scenario.id} clearance item`);
+    assert.equal(
+      clearance.details?.clearance?.clearanceRequestNumber,
+      expectedNumber,
+    );
+    assert.equal(clearance.sourceRecordLabel, expectedNumber);
+    assert.match(
+      clearance.sourceRecordUrl ?? "",
+      new RegExp(`record=${expectedNumber}`),
+    );
+  }
+});
+
 test("the five demo scenarios evaluate to their intended overall states", () => {
   const expected = {
     blocked: "BLOCKED",

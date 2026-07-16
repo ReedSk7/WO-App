@@ -21,7 +21,7 @@ function formatDate(value: string, includeTime = false) {
     day: "numeric",
     year: "numeric",
     ...(includeTime
-      ? { hour: "numeric", minute: "2-digit", second: "2-digit" }
+      ? { hour: "numeric", minute: "2-digit" }
       : {}),
   }).format(date);
 }
@@ -43,41 +43,42 @@ export function ReadinessSummary({
           <h1 className="mono" id="work-order-title">
             {workOrder.workOrderNumber}
           </h1>
+          <p className="summary-card__description">
+            {workOrder.taskDescription}
+          </p>
         </div>
         <StatusBadge status={evaluation.overallStatus} />
       </div>
 
-      <p className="summary-card__description">{workOrder.taskDescription}</p>
-
-      <dl className="summary-metadata">
+      <dl className="summary-quick-meta">
         <div>
-          <dt>Selected site</dt>
+          <dt>Site</dt>
           <dd>{workOrder.site}</dd>
+        </div>
+        <div>
+          <dt>Scheduled</dt>
+          <dd>{formatDate(workOrder.scheduledExecutionDate)}</dd>
+        </div>
+        <div>
+          <dt>Window</dt>
+          <dd>
+            <span className="work-mode-badge">{workOrder.workMode}</span>
+          </dd>
         </div>
         <div>
           <dt>Equipment / location</dt>
           <dd className="mono">{workOrder.equipmentOrLocation}</dd>
         </div>
-        <div>
-          <dt>Scheduled execution</dt>
-          <dd>{formatDate(workOrder.scheduledExecutionDate)}</dd>
-        </div>
-        <div>
-          <dt>Work window</dt>
-          <dd>
-            <span className="work-mode-badge">{workOrder.workMode}</span>
-          </dd>
-        </div>
       </dl>
 
       <div className={`overall-callout overall-callout--${evaluation.overallStatus.toLowerCase().replaceAll(" ", "-")}`}>
         <div>
-          <p className="eyebrow">Overall readiness</p>
+          <p className="eyebrow">Overall status</p>
           <h2>{evaluation.overallStatus}</h2>
           <p>{evaluation.overallReason}</p>
         </div>
         <div className="refresh-control">
-          <span>Last data refresh</span>
+          <span>Updated</span>
           <time dateTime={workOrder.lastDataRefreshAt}>
             {formatDate(workOrder.lastDataRefreshAt, true)}
           </time>
@@ -88,7 +89,7 @@ export function ReadinessSummary({
             type="button"
           >
             <span aria-hidden="true">↻</span>
-            {refreshing ? "Refreshing…" : "Refresh demonstration data"}
+            {refreshing ? "Refreshing…" : "Refresh"}
           </button>
         </div>
       </div>
@@ -105,22 +106,22 @@ export function ReadinessSummary({
         <div className="summary-count summary-count--complete">
           <span aria-hidden="true">✓</span>
           <strong>{counts.completedChecks}</strong>
-          <span>Completed checks</span>
+          <span>Complete</span>
         </div>
         <div className="summary-count summary-count--blocker">
           <span aria-hidden="true">!</span>
           <strong>{counts.confirmedBlockers}</strong>
-          <span>Confirmed blockers</span>
+          <span>Blockers</span>
         </div>
         <div className="summary-count summary-count--review">
           <span aria-hidden="true">!</span>
           <strong>{counts.reviewRequired}</strong>
-          <span>Review required</span>
+          <span>Review</span>
         </div>
         <div className="summary-count summary-count--unable">
           <span aria-hidden="true">?</span>
           <strong>{counts.unableToVerifyCount}</strong>
-          <span>Unable to verify</span>
+          <span>Unverified</span>
         </div>
       </div>
     </section>

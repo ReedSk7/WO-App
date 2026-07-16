@@ -261,6 +261,10 @@ function createReadyItems(
   workOrderNumber: string,
   scheduledExecutionDate: string,
 ): ReadinessItem[] {
+  const clearanceRequestNumber = recordId(
+    workOrderNumber,
+    "CLEARANCE-01",
+  );
   const safety = {
     ...baseItem(
       workOrderNumber,
@@ -300,9 +304,12 @@ function createReadyItems(
     ),
     owner: "Operations",
     isCriticalData: true,
+    sourceRecordLabel: clearanceRequestNumber,
+    sourceRecordUrl: sourceUrl(clearanceRequestNumber, SOURCE_SYSTEM),
     details: {
       clearance: {
         isolationRequired: "Required" as const,
+        clearanceRequestNumber,
         clearanceRequestStatus: "Synthetic request coordinated",
         energySources: [
           { type: "Electrical" as const, identified: true },

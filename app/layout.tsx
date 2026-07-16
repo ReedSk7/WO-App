@@ -10,7 +10,7 @@ export async function generateMetadata(): Promise<Metadata> {
     requestHeaders.get("x-forwarded-proto") ??
     (host.startsWith("localhost") ? "http" : "https");
   const origin = `${protocol}://${host}`;
-  const socialImage = new URL("/og.png", origin).toString();
+  const socialImage = new URL("/og-compact-field.png", origin).toString();
   const description =
     "A demonstration work-order readiness decision-support prototype for field teams.";
 
@@ -27,9 +27,9 @@ export async function generateMetadata(): Promise<Metadata> {
       images: [
         {
           url: socialImage,
-          width: 1733,
-          height: 909,
-          alt: "Field Ops Work Order Readiness demonstration prototype",
+          width: 1659,
+          height: 948,
+          alt: "Compact Field Ops Work Order Readiness demonstration interface",
         },
       ],
     },

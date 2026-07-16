@@ -17,7 +17,6 @@ import {
   DEMO_SCENARIOS,
   DemoScenarioSelector,
 } from "./DemoScenarioSelector";
-import { FeedbackPanel } from "./FeedbackPanel";
 import { PrototypeBanner } from "./PrototypeBanner";
 
 const PROTOTYPE_NOTICE =
@@ -139,27 +138,30 @@ export function HomeScreen() {
       <PrototypeBanner />
 
       <main
-        className="mx-auto max-w-[92rem] px-4 py-8 sm:px-6 sm:py-10 lg:px-8 lg:py-12"
+        className="mx-auto max-w-[86rem] px-4 py-6 sm:px-6 sm:py-8 lg:px-8"
         id="work-order-search"
         tabIndex={-1}
       >
-        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(22rem,0.8fr)]">
           <section aria-labelledby="home-title">
             <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-800">
               Field-first readiness check
             </p>
             <h1
-              className="mt-2 max-w-3xl text-3xl font-black tracking-tight text-[#0b1f36] sm:text-4xl lg:text-5xl"
+              className="mt-1.5 max-w-3xl text-2xl font-black tracking-tight text-[#0b1f36] sm:text-3xl"
               id="home-title"
             >
               Work Order Readiness
             </h1>
-            <p className="mt-4 max-w-3xl text-base leading-7 text-slate-600 sm:text-lg">
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 sm:text-base">
               See whether a synthetic work order can be executed, what is
               preventing execution, and the next action required.
             </p>
+            <p className="mt-2 text-sm font-bold text-slate-700">
+              For Mechanical, Electrical, and Instrument &amp; Controls maintenance.
+            </p>
 
-            <div className="mt-7 rounded-lg border border-slate-300 bg-white p-4 shadow-sm sm:p-6">
+            <div className="mt-5 rounded-lg border border-slate-300 bg-white p-4 shadow-sm sm:p-5">
               <form noValidate onSubmit={handleSubmit}>
                 <div className="grid gap-5 lg:grid-cols-2">
                   <div>
@@ -257,7 +259,7 @@ export function HomeScreen() {
                 Demonstration data
               </p>
               <h2
-                className="mt-1 text-xl font-black text-[#0b1f36]"
+                className="mt-1 text-lg font-black text-[#0b1f36]"
                 id="recent-work-orders-title"
               >
                 Recent synthetic work orders
@@ -296,10 +298,6 @@ export function HomeScreen() {
               ))}
             </ul>
           </section>
-        </div>
-
-        <div className="mt-8 max-w-3xl">
-          <FeedbackPanel />
         </div>
       </main>
     </div>

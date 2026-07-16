@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { filterReadinessItems } from "../lib/readiness/evaluate";
 import { createMockReadinessService } from "../lib/readiness/service";
 import {
   READINESS_CATEGORY_LABELS,
-  type ReadinessFilter,
+  type ReadinessItem,
   type ReadinessViewModel,
   type Site,
 } from "../lib/readiness/types";
@@ -16,19 +15,19 @@ import {
   isDemoScenarioId,
   isSiteId,
   loadReviewedOperationalExperienceIds,
-  loadSelectedFilter,
   saveReviewedOperationalExperienceIds,
-  saveSelectedFilter,
   type DemoScenarioId,
   type SiteId,
 } from "../lib/storage";
-import { ActionItemsPanel } from "./ActionItemsPanel";
-import { ActionSummary } from "./ActionSummary";
 import { DEMO_SCENARIOS, DemoScenarioSelector } from "./DemoScenarioSelector";
 import { FeedbackPanel } from "./FeedbackPanel";
-import { FilterBar } from "./FilterBar";
 import { PrototypeBanner } from "./PrototypeBanner";
 import { ReadinessCard } from "./ReadinessCard";
+import { ReadinessItemDialog } from "./ReadinessItemDialog";
+import {
+  ReadinessNavigation,
+  type ReadinessMainView,
+} from "./ReadinessNavigation";
 import { ReadinessSummary } from "./ReadinessSummary";
 import { WhatChanged } from "./WhatChanged";
 
@@ -49,8 +48,8 @@ export function WorkOrderReadiness({
   const [loadState, setLoadState] = useState<
     "loading" | "ready" | "not-found" | "error"
   >("loading");
-  const [filter, setFilter] = useState<ReadinessFilter>("action-needed");
-  const [actionsOpen, setActionsOpen] = useState(false);
+  const [activeView, setActiveView] = useState<ReadinessMainView>("overview");
+  const [selectedItem, setSelectedItem] = useState<ReadinessItem | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshMessage, setRefreshMessage] = useState("");
   const [reviewedOeIds, setReviewedOeIds] = useState<Set<string>>(new Set());
@@ -78,14 +77,6 @@ export function WorkOrderReadiness({
 
         setViewModel(model);
         setReviewedOeIds(new Set(loadReviewedOperationalExperienceIds()));
-        const storedFilter = loadSelectedFilter();
-        setFilter(
-          model.evaluation.counts.actionNeeded > 0
-            ? "action-needed"
-            : storedFilter === "action-needed"
-              ? "all"
-              : storedFilter,
-        );
         setLoadState("ready");
       })
       .catch(() => {
@@ -99,15 +90,12 @@ export function WorkOrderReadiness({
     };
   }, [requestedWorkOrderNumber, selectedSite, service]);
 
-  const filteredItems = useMemo(() => {
+  const unresolvedItems = useMemo(() => {
     if (!viewModel) return [];
-    return filterReadinessItems(viewModel.evaluation.sortedItems, filter);
-  }, [filter, viewModel]);
-
-  function changeFilter(nextFilter: ReadinessFilter) {
-    setFilter(nextFilter);
-    saveSelectedFilter(nextFilter);
-  }
+    return viewModel.evaluation.sortedItems.filter(
+      (item) => item.status !== "complete" && item.status !== "notApplicable",
+    );
+  }, [viewModel]);
 
   function changeScenario(scenario: DemoScenarioId) {
     const definition = DEMO_SCENARIOS.find((item) => item.id === scenario);
@@ -229,11 +217,12 @@ export function WorkOrderReadiness({
   }
 
   const categoryLabels = Object.values(READINESS_CATEGORY_LABELS);
+  const priorityItems = unresolvedItems.slice(0, 3);
 
   return (
     <div className="readiness-app">
       <a className="skip-link" href="#readiness-main">
-        Skip to readiness summary
+        Skip to readiness workspace
       </a>
       <header className="field-header">
         <div className="field-header__inner">
@@ -253,16 +242,13 @@ export function WorkOrderReadiness({
           <span className="field-header__demo">Demonstration only</span>
         </div>
       </header>
-      <PrototypeBanner />
+      <PrototypeBanner compact />
 
       <main className="readiness-main" id="readiness-main" tabIndex={-1}>
         <div className="readiness-toolbar">
           <div>
-            <p className="eyebrow">Readiness workspace</p>
-            <p>
-              Review unresolved conditions first, then open any check for its
-              demonstration basis and next action.
-            </p>
+            <p className="eyebrow">Field readiness</p>
+            <p>Select an area to see its status, record number, and next action.</p>
           </div>
           <DemoScenarioSelector
             compact
@@ -278,104 +264,143 @@ export function WorkOrderReadiness({
           </p>
         ) : null}
 
-        <ReadinessSummary
-          evaluation={viewModel.evaluation}
-          onRefresh={refreshData}
-          refreshing={refreshing}
-          sourceAvailability={viewModel.scenario.sourceAvailability}
-          workOrder={viewModel.workOrder}
-        />
-
         <p className="sr-status" aria-live="polite" role="status">
           {refreshMessage}
         </p>
 
-        {viewModel.evaluation.actions.length > 0 ? (
-          <ActionSummary
-            actions={viewModel.evaluation.actions}
-            onViewActionItems={() => {
-              setActionsOpen(true);
-              window.setTimeout(
-                () => document.getElementById("action-items")?.focus(),
-                0,
-              );
-            }}
+        <div className="field-workspace">
+          <ReadinessNavigation
+            actionCount={viewModel.evaluation.counts.actionNeeded}
+            activeView={activeView}
+            changeCount={viewModel.scenario.changes.length}
+            items={viewModel.evaluation.normalizedItems}
+            onOpenItem={(item) => setSelectedItem(item)}
+            onSelectView={setActiveView}
+            openItemId={selectedItem?.id}
           />
-        ) : (
-          <section className="no-actions-summary" aria-labelledby="no-actions-title">
-            <span aria-hidden="true">✓</span>
-            <div>
-              <h2 id="no-actions-title">No unresolved action items</h2>
-              <p>
-                All required demonstration checks are complete. Continue to
-                verify approved sources and field conditions before work.
-              </p>
-            </div>
-          </section>
-        )}
 
-        <ActionItemsPanel
-          actions={viewModel.evaluation.actions}
-          onClose={() => setActionsOpen(false)}
-          open={actionsOpen}
-        />
+          <div
+            aria-label="Selected readiness view"
+            className="field-workspace__content"
+            id="readiness-workspace-panel"
+            role="region"
+          >
+            <ReadinessSummary
+              evaluation={viewModel.evaluation}
+              onRefresh={refreshData}
+              refreshing={refreshing}
+              sourceAvailability={viewModel.scenario.sourceAvailability}
+              workOrder={viewModel.workOrder}
+            />
 
-        <section className="readiness-list-section" aria-labelledby="checks-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Fourteen normalized categories</p>
-              <h2 id="checks-title">Readiness Checks</h2>
-              <p>
-                Showing {filteredItems.length} of {viewModel.evaluation.counts.total}
-                {" "}checks. Unresolved checks are sorted by execution impact.
-              </p>
-            </div>
-            {filter !== "all" ? (
-              <button
-                className="button button--tertiary"
-                onClick={() => changeFilter("all")}
-                type="button"
+            {activeView === "overview" ? (
+              <section
+                className="workspace-panel workspace-panel--below-summary"
+                aria-labelledby="overview-title"
               >
-                Show all 14 categories
-              </button>
+                <div className="workspace-panel__heading">
+                  <div>
+                    <p className="eyebrow">Overview</p>
+                    <h2 id="overview-title">Start with what needs attention</h2>
+                  </div>
+                  {unresolvedItems.length > 3 ? (
+                    <button
+                      className="button button--tertiary"
+                      onClick={() => setActiveView("action-needed")}
+                      type="button"
+                    >
+                      View all {unresolvedItems.length}
+                    </button>
+                  ) : null}
+                </div>
+
+                <div className="field-start-note">
+                  <span aria-hidden="true">1</span>
+                  <div>
+                    <h3>Choose a readiness area from the menu.</h3>
+                    <p>
+                      Its status, synthetic record number, and full details open
+                      in one popup.
+                    </p>
+                  </div>
+                </div>
+
+                {priorityItems.length > 0 ? (
+                  <div className="field-priority-list" aria-label="Highest priority items">
+                    {priorityItems.map((item) => (
+                      <ReadinessCard
+                        item={item}
+                        key={item.id}
+                        onOpenDetails={(nextItem) => setSelectedItem(nextItem)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <section
+                    className="no-actions-summary"
+                    aria-labelledby="no-actions-title"
+                  >
+                    <span aria-hidden="true">✓</span>
+                    <div>
+                      <h2 id="no-actions-title">No unresolved action items</h2>
+                      <p>
+                        Required demonstration checks are complete. Continue to
+                        verify approved sources and field conditions before work.
+                      </p>
+                    </div>
+                  </section>
+                )}
+              </section>
+            ) : null}
+
+            {activeView === "action-needed" ? (
+              <section
+                className="workspace-panel workspace-panel--below-summary"
+                aria-labelledby="actions-title"
+              >
+                <div className="workspace-panel__heading">
+                  <div>
+                    <p className="eyebrow">Action needed</p>
+                    <h2 id="actions-title">Resolve these items first</h2>
+                    <p>Sorted by impact. Select an item for the record and next action.</p>
+                  </div>
+                  <span className="workspace-panel__count">
+                    {unresolvedItems.length}
+                  </span>
+                </div>
+
+                {unresolvedItems.length > 0 ? (
+                  <div className="field-priority-list">
+                    {unresolvedItems.map((item) => (
+                      <ReadinessCard
+                        item={item}
+                        key={item.id}
+                        onOpenDetails={(nextItem) => setSelectedItem(nextItem)}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty-state empty-state--panel">
+                    <span aria-hidden="true">✓</span>
+                    <h3>No unresolved items</h3>
+                    <p>No missing result was converted into a passing status.</p>
+                  </div>
+                )}
+              </section>
+            ) : null}
+
+            {activeView === "changes" ? (
+              <section className="workspace-panel workspace-panel--component workspace-panel--below-summary" aria-label="What changed">
+                <WhatChanged changes={viewModel.scenario.changes} />
+              </section>
+            ) : null}
+
+            {activeView === "feedback" ? (
+              <section className="workspace-panel workspace-panel--component workspace-panel--below-summary" aria-label="Report information">
+                <FeedbackPanel categories={categoryLabels} />
+              </section>
             ) : null}
           </div>
-
-          <div className="readiness-sticky">
-            <FilterBar
-              counts={viewModel.evaluation.filterCounts}
-              onChange={changeFilter}
-              value={filter}
-            />
-          </div>
-
-          {filteredItems.length === 0 ? (
-            <div className="empty-state empty-state--panel">
-              <span aria-hidden="true">✓</span>
-              <h3>No checks match this filter.</h3>
-              <p>
-                Choose another filter or show all categories. No missing result
-                was converted into a passing status.
-              </p>
-            </div>
-          ) : (
-            <div className="readiness-list">
-              {filteredItems.map((item) => (
-                <ReadinessCard
-                  item={item}
-                  key={item.id}
-                  onMarkOperationalExperienceReviewed={markOeReviewed}
-                  referenceTime={viewModel.evaluation.evaluatedAt}
-                  reviewedOperationalExperienceIds={reviewedOeIds}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <div className="supporting-grid">
-          <WhatChanged changes={viewModel.scenario.changes} />
-          <FeedbackPanel categories={categoryLabels} />
         </div>
 
         <footer className="readiness-footer">
@@ -387,6 +412,14 @@ export function WorkOrderReadiness({
           </p>
         </footer>
       </main>
+
+      <ReadinessItemDialog
+        item={selectedItem}
+        onClose={() => setSelectedItem(null)}
+        onMarkOperationalExperienceReviewed={markOeReviewed}
+        referenceTime={viewModel.evaluation.evaluatedAt}
+        reviewedOperationalExperienceIds={reviewedOeIds}
+      />
     </div>
   );
 }

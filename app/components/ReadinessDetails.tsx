@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
-import type { ReadinessItem } from "@/app/lib/readiness/types";
+import {
+  VERIFICATION_METHOD_LABELS,
+  type ReadinessItem,
+  type VerificationMethod,
+} from "@/app/lib/readiness/types";
 import { StatusBadge, type StatusValue } from "./StatusBadge";
 
 export type ReadinessDetailsProps = {
@@ -78,6 +82,35 @@ function displayValue(value: unknown): string | null {
   return null;
 }
 
+function formatDetailDisplay(label: string, value: string | null) {
+  if (!value) return value;
+  if (
+    !/(date|checked|verified|timestamp|execution|target)/i.test(label) ||
+    !/^\d{4}-\d{2}-\d{2}T/.test(value)
+  ) {
+    return value;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parsed);
+}
+
+function verificationDisplay(value: unknown) {
+  if (
+    typeof value === "string" &&
+    Object.prototype.hasOwnProperty.call(VERIFICATION_METHOD_LABELS, value)
+  ) {
+    return VERIFICATION_METHOD_LABELS[value as VerificationMethod];
+  }
+  return value;
+}
+
 function safeRecordHref(value: string) {
   if (!value || value === "#") return null;
   try {
@@ -116,7 +149,10 @@ function DetailGrid({
   emptyMessage?: string;
 }) {
   const visibleFields = fields
-    .map((field) => ({ ...field, display: displayValue(field.value) }))
+    .map((field) => ({
+      ...field,
+      display: formatDetailDisplay(field.label, displayValue(field.value)),
+    }))
     .filter((field) => field.display !== null);
 
   if (visibleFields.length === 0) {
@@ -173,7 +209,9 @@ function GenericDetails({ source }: { source: UnknownRecord }) {
           { label: "Applicability", value: read(source, ["applicability"]) },
           {
             label: "Verification method",
-            value: read(source, ["verificationMethod", "confidence"]),
+            value: verificationDisplay(
+              read(source, ["verificationMethod", "confidence"]),
+            ),
           },
           { label: "Outstanding prerequisites", value: prerequisites },
           { label: "Next action", value: read(source, ["nextAction"]) },
@@ -231,6 +269,117 @@ function permitRecordStatus(record: UnknownRecord): StatusValue {
   return "pending";
 }
 
+function permitRecordPriority(record: UnknownRecord) {
+  const normalized = String(permitRecordStatus(record))
+    .replace(/[\s_-]/g, "")
+    .toLowerCase();
+  return (
+    {
+      blocker: 0,
+      unabletoverify: 1,
+      review: 2,
+      pending: 3,
+      dayofaction: 4,
+      complete: 5,
+      notapplicable: 6,
+    }[normalized] ?? 7
+  );
+}
+
+function PermitRecordCard({
+  record,
+  index,
+}: {
+  record: UnknownRecord;
+  index: number;
+}) {
+  const type = text(
+    record,
+    ["type", "title", "controlType"],
+    "Permit or special control",
+  );
+  const recordId = text(
+    record,
+    ["id", "requestNumber", "recordNumber"],
+    `${type}-${index}`,
+  );
+  const prerequisites = read(record, ["prerequisites"]);
+  const outstandingPrerequisites = read(record, [
+    "outstandingPrerequisites",
+  ]);
+  const blockingIssue = text(record, ["blockingIssue"]);
+  const recordUrl = text(record, [
+    "sourceRecordUrl",
+    "recordUrl",
+    "url",
+  ]);
+
+  return (
+    <article className="detail-record" key={recordId}>
+      <div className="detail-record__heading">
+        <div>
+          <p className="detail-record__eyebrow">Permit / control</p>
+          <h5>{type}</h5>
+        </div>
+        <StatusBadge status={permitRecordStatus(record)} compact />
+      </div>
+      <DetailGrid
+        fields={[
+          {
+            label: "Applicability",
+            value: read(record, ["applicability"]),
+          },
+          {
+            label: "Lifecycle status",
+            value: read(record, ["lifecycleStatus", "status"]),
+          },
+          {
+            label: "Responsible group",
+            value: read(record, ["responsibleGroup", "owner"]),
+          },
+          {
+            label: "Request / record",
+            value: read(record, [
+              "requestRecordNumber",
+              "requestNumber",
+              "recordNumber",
+              "sourceRecordLabel",
+            ]),
+            mono: true,
+          },
+          {
+            label: "Target-ready date",
+            value: read(record, ["targetReadyDate"]),
+          },
+          {
+            label: "Execution date",
+            value: read(record, ["scheduledExecutionDate", "executionDate"]),
+          },
+          {
+            label: "Outstanding prerequisites",
+            value: outstandingPrerequisites,
+          },
+          { label: "Prerequisites / basis", value: prerequisites },
+          { label: "Blocking issue", value: blockingIssue },
+          {
+            label: "Advance prerequisites complete",
+            value: read(record, ["advancePrerequisitesComplete"]),
+          },
+          {
+            label: "Requires day-of issuance",
+            value: read(record, ["requiresDayOfIssuance"]),
+          },
+          {
+            label: "Last verified",
+            value: read(record, ["lastVerifiedAt", "lastCheckedAt"]),
+          },
+        ]}
+      />
+      <SourceRecordLink url={recordUrl} label={type} />
+    </article>
+  );
+}
+
 function PermitsDetails({ source }: { source: UnknownRecord }) {
   const detail = withNested(source, [
     "permitsAndSpecialControls",
@@ -242,11 +391,12 @@ function PermitsDetails({ source }: { source: UnknownRecord }) {
     "controls",
     "records",
   ]);
-  const explicitlyNoRequiredControls =
-    records.length > 0 &&
-    records.every(
-      (record) => text(record, ["applicability"]) === "Not Required",
-    );
+  const activeRecords = records
+    .filter((record) => text(record, ["applicability"]) !== "Not Required")
+    .sort((left, right) => permitRecordPriority(left) - permitRecordPriority(right));
+  const notRequiredRecords = records.filter(
+    (record) => text(record, ["applicability"]) === "Not Required",
+  );
 
   return (
     <DetailSection title="Permit and control records">
@@ -259,101 +409,43 @@ function PermitsDetails({ source }: { source: UnknownRecord }) {
           No permit or control records were returned. This does not mean no
           permits or special controls are required.
         </p>
-      ) : explicitlyNoRequiredControls ? (
-        <p className="empty-state empty-state--inline">
-          No permits or special controls are required in this synthetic
-          scenario. Each record was explicitly evaluated as Not Required.
-        </p>
       ) : (
-        <div className="detail-record-list">
-          {records.map((record, index) => {
-            const type = text(
-              record,
-              ["type", "title", "controlType"],
-              "Permit or special control",
-            );
-            const recordId = text(
-              record,
-              ["id", "requestNumber", "recordNumber"],
-              `${type}-${index}`,
-            );
-            const prerequisites = read(record, ["prerequisites"]);
-            const outstandingPrerequisites = read(record, [
-              "outstandingPrerequisites",
-            ]);
-            const blockingIssue = text(record, ["blockingIssue"]);
-            const recordUrl = text(record, [
-              "sourceRecordUrl",
-              "recordUrl",
-              "url",
-            ]);
-
-            return (
-              <article className="detail-record" key={recordId}>
-                <div className="detail-record__heading">
-                  <div>
-                    <p className="detail-record__eyebrow">Permit / control</p>
-                    <h5>{type}</h5>
-                  </div>
-                  <StatusBadge status={permitRecordStatus(record)} compact />
-                </div>
-                <DetailGrid
-                  fields={[
-                    {
-                      label: "Applicability",
-                      value: read(record, ["applicability"]),
-                    },
-                    {
-                      label: "Lifecycle status",
-                      value: read(record, ["lifecycleStatus", "status"]),
-                    },
-                    {
-                      label: "Responsible group",
-                      value: read(record, ["responsibleGroup", "owner"]),
-                    },
-                    {
-                      label: "Request / record",
-                      value: read(record, [
-                        "requestRecordNumber",
-                        "requestNumber",
-                        "recordNumber",
-                        "sourceRecordLabel",
-                      ]),
-                      mono: true,
-                    },
-                    {
-                      label: "Target-ready date",
-                      value: read(record, ["targetReadyDate"]),
-                    },
-                    {
-                      label: "Execution date",
-                      value: read(record, ["scheduledExecutionDate", "executionDate"]),
-                    },
-                    {
-                      label: "Outstanding prerequisites",
-                      value: outstandingPrerequisites,
-                    },
-                    { label: "Prerequisites / basis", value: prerequisites },
-                    { label: "Blocking issue", value: blockingIssue },
-                    {
-                      label: "Advance prerequisites complete",
-                      value: read(record, ["advancePrerequisitesComplete"]),
-                    },
-                    {
-                      label: "Requires day-of issuance",
-                      value: read(record, ["requiresDayOfIssuance"]),
-                    },
-                    {
-                      label: "Last verified",
-                      value: read(record, ["lastVerifiedAt", "lastCheckedAt"]),
-                    },
-                  ]}
+        <>
+          {activeRecords.length > 0 ? (
+            <div className="detail-record-list">
+              {activeRecords.map((record, index) => (
+                <PermitRecordCard
+                  index={index}
+                  key={text(record, ["id"], `active-control-${index}`)}
+                  record={record}
                 />
-                <SourceRecordLink url={recordUrl} label={type} />
-              </article>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-state empty-state--inline">
+              No permits or special controls are required in this synthetic
+              scenario. Each returned record was explicitly evaluated.
+            </p>
+          )}
+
+          {notRequiredRecords.length > 0 ? (
+            <details className="permit-records-not-required">
+              <summary>
+                Show {notRequiredRecords.length} explicitly Not Required
+                {notRequiredRecords.length === 1 ? " control" : " controls"}
+              </summary>
+              <div className="detail-record-list">
+                {notRequiredRecords.map((record, index) => (
+                  <PermitRecordCard
+                    index={activeRecords.length + index}
+                    key={text(record, ["id"], `not-required-control-${index}`)}
+                    record={record}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </>
       )}
     </DetailSection>
   );
@@ -377,6 +469,16 @@ function ClearanceDetails({ source }: { source: UnknownRecord }) {
           {
             label: "Isolation required",
             value: read(detail, ["isolationRequired", "isolationDetermination"]),
+          },
+          {
+            label: "Clearance number",
+            value: read(detail, [
+              "clearanceRequestNumber",
+              "requestRecordNumber",
+              "clearanceNumber",
+              "sourceRecordLabel",
+            ]),
+            mono: true,
           },
           {
             label: "Clearance request status",
@@ -1207,13 +1309,16 @@ export function ReadinessDetails({
 
   return (
     <div className={`readiness-details ${className}`.trim()}>
-      <GenericDetails source={source} />
       <CategoryDetails
         source={source}
         category={category}
         reviewed={reviewedIds}
         markReviewed={markReviewed}
       />
+      <details className="readiness-details__more">
+        <summary>More source and history information</summary>
+        <GenericDetails source={source} />
+      </details>
       <p className="readiness-details__safety-note">
         Verify this information using approved processes and source systems
         before beginning work.
